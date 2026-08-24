@@ -1,0 +1,39 @@
+# Python environments and caches
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local deployment configuration
+config.factory.json
+config.json
+
+# Runtime measurements, journals, logs, and exports
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.jsonl
+*.log
+*.csv
+*.xlsx
+
+# Factory packet captures and discovery evidence
+*.pcap
+*.pcapng
+*.capture
+
+# Generated builds and release archives
+build/
+dist/
+portable-dist/
+*.spec
+*.zip
+
+# Local editor and operating-system files
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store

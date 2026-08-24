@@ -1,0 +1,73 @@
+VFREG-VISOR-SOFIA - INSTRUCCIONES PARA LA PC DE LA EMPRESA
+============================================================
+
+Esta carpeta es portable. No requiere Python, Git, un IDE ni conexion a Internet.
+
+IMPORTANTE
+----------
+- Usar una PC Windows de 64 bits.
+- Conectar el cable Ethernet del NT1-B a la PC.
+- No conectar al mismo tiempo otra PC configurada con 192.168.1.1.
+- El NT1-B confirmado se encuentra en 192.168.1.7, puerto TCP 502.
+
+CONFIGURACION DE RED
+--------------------
+La placa Ethernet conectada al NT1-B debe usar:
+
+  Direccion IPv4: 192.168.1.1
+  Mascara:        255.255.255.0
+  Gateway:        vacio
+  DNS:            vacio
+
+Verificar primero el nombre de la placa desde PowerShell:
+
+  Get-NetAdapter
+
+Si el nombre es "Ethernet", ejecutar PowerShell como administrador:
+
+  netsh interface ipv4 set address name="Ethernet" source=static address=192.168.1.1 mask=255.255.255.0 gateway=none
+
+No ejecutar ese comando sobre la placa de red corporativa. Reemplazar "Ethernet"
+si la placa dedicada tiene otro nombre.
+
+PRUEBA DE CONEXION
+------------------
+Desde PowerShell:
+
+  ping 192.168.1.7
+  Test-NetConnection 192.168.1.7 -Port 502
+
+El resultado esperado es TcpTestSucceeded : True.
+
+INICIAR EL VISOR
+----------------
+Opcion simple:
+
+  Doble clic en "Start VFREG Visor.bat"
+
+O desde PowerShell abierto dentro de esta carpeta:
+
+  & ".\VFREG-VISOR-SOFIA.exe" --config ".\config.factory.json"
+
+Luego abrir en el navegador:
+
+  http://127.0.0.1:8000
+
+Mantener abierta la ventana del colector. Para detenerlo correctamente, usar Ctrl+C.
+
+DATOS Y EXPORTACIONES
+---------------------
+Los datos se guardan en:
+
+  data\factory\readings.sqlite
+  data\factory\readings.csv
+  data\factory\readings.xlsx
+  data\factory\raw_packets.jsonl
+
+Copiar toda la carpeta si se necesita conservar o respaldar la informacion.
+
+WINDOWS FIREWALL / SMARTSCREEN
+------------------------------
+El ejecutable es una compilacion interna sin firma digital. Windows puede mostrar
+una advertencia de SmartScreen. La aplicacion solamente publica el dashboard en
+127.0.0.1 y se conecta al NT1-B en 192.168.1.7:502.

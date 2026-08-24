@@ -1,0 +1,80 @@
+{
+  "site_name": "VFREG factory collector",
+  "device_name": "VFREG via Ebyte NT1-B",
+  "output_csv": "data/factory/readings.csv",
+  "output_sqlite": "data/factory/readings.sqlite",
+  "output_xlsx": "data/factory/readings.xlsx",
+  "raw_journal": "data/factory/raw_packets.jsonl",
+  "storage": {
+    "queue_size": 10000,
+    "batch_size": 100,
+    "raw_journal_max_bytes": 104857600,
+    "raw_journal_backups": 5
+  },
+  "network": {
+    "mode": "modbus_tcp_client",
+    "tcp_host": "192.168.1.7",
+    "tcp_port": 502,
+    "reconnect_delay_seconds": 2,
+    "connection_timeout_seconds": 3,
+    "port_confirmed": true,
+    "modbus": {
+      "unit_id": 5,
+      "function_code": 4,
+      "start_register": 0,
+      "quantity": 3,
+      "poll_interval_seconds": 5.0,
+      "request_timeout_seconds": 2,
+      "register_map": {
+        "voltage_v": {
+          "register": 0,
+          "scale": 1
+        },
+        "current_ma": {
+          "register": 1,
+          "scale": 1
+        },
+        "frequency_hz": {
+          "register": 2,
+          "scale": 1
+        }
+      }
+    }
+  },
+  "dashboard": {
+    "host": "127.0.0.1",
+    "port": 8000
+  },
+  "factory": {
+    "expected_device_ip": "192.168.1.7",
+    "expected_device_mac": "",
+    "expected_collector_ip": "192.168.1.1",
+    "ethernet_module": "Ebyte NT1-B",
+    "ethernet_module_serial": "",
+    "ethernet_module_version": "",
+    "serial_settings": "9600 8E1",
+    "batch_id": "",
+    "shift": "",
+    "capture_filter": "arp or ip.addr == 192.168.1.7"
+  },
+  "limits": {
+    "confirmed": false,
+    "voltage_v": {
+      "min": 0,
+      "max": 65535
+    },
+    "current_ma": {
+      "min": 0,
+      "max": 65535
+    },
+    "frequency_hz": {
+      "min": 0,
+      "max": 65535
+    }
+  },
+  "units": {
+    "voltage_v": "V",
+    "current_ma": "mA",
+    "frequency_hz": "Hz"
+  }
+}

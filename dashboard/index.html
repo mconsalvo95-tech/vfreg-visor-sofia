@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VFREG Monitor</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <p class="site-label" id="site-name">Factory collector</p>
+      <h1>VFREG Monitor</h1>
+    </div>
+    <div class="header-actions">
+      <div class="connection" id="connection" data-state="WAITING">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span id="connection-label">Waiting</span>
+      </div>
+      <a class="button" href="/api/export.csv" download>CSV</a>
+      <a class="button button-primary" id="xlsx-export" href="/api/export.xlsx" download title="Excel workbook with separate management charts">XLSX + Charts</a>
+      <span class="export-status" id="export-status" role="status"></span>
+    </div>
+  </header>
+
+  <main>
+    <section class="metrics" aria-label="Latest VFREG measurements">
+      <article class="metric time">
+        <p>Last reading</p>
+        <strong id="reading-time">--</strong>
+        <span id="reading-date">No readings</span>
+      </article>
+      <article class="metric voltage">
+        <p>Volts</p>
+        <strong><span id="voltage">--</span> <small>V</small></strong>
+      </article>
+      <article class="metric current">
+        <p>Current</p>
+        <strong><span id="current">--</span> <small>mA</small></strong>
+      </article>
+      <article class="metric frequency">
+        <p>Frequency</p>
+        <strong><span id="frequency">--</span> <small>Hz</small></strong>
+      </article>
+      <article class="metric state">
+        <p>Status</p>
+        <strong id="status-value">Waiting</strong>
+        <span id="status-detail">Waiting for the VFREG</span>
+      </article>
+    </section>
+
+    <section class="sampling-section" aria-label="Data sampling interval">
+      <form class="sampling-form" id="sampling-form">
+        <div>
+          <p class="eyebrow">Data collection</p>
+          <h2>Reading interval</h2>
+        </div>
+        <label for="poll-interval">Read the VFREG every</label>
+        <select id="poll-interval" name="seconds">
+          <option value="0.5">0.5 seconds — fast testing</option>
+          <option value="1">1 second</option>
+          <option value="5">5 seconds</option>
+          <option value="15">15 seconds</option>
+          <option value="30">30 seconds</option>
+          <option value="60">1 minute</option>
+        </select>
+        <button class="sampling-save" id="sampling-save" type="submit">Apply</button>
+        <span class="sampling-result" id="sampling-result" role="status"></span>
+      </form>
+      <p class="sampling-note">
+        <strong id="daily-reading-estimate">-- readings/day</strong>
+        Longer intervals reduce stored data but can miss brief electrical variations.
+      </p>
+    </section>
+
+    <section class="chart-section">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Live history</p>
+          <h2>Volts, current and frequency</h2>
+        </div>
+        <div class="chart-legend" aria-label="Chart legend">
+          <span class="legend-voltage">Volts</span>
+          <span class="legend-current">mAmp</span>
+          <span class="legend-frequency">Frequency</span>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="history-chart" aria-label="Recent VFREG measurement graph"></canvas>
+        <p class="empty-chart" id="empty-chart">Waiting for readings</p>
+      </div>
+    </section>
+
+    <section class="records-section" aria-label="Recent VFREG readings">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Live data</p>
+          <h2>Recent readings</h2>
+        </div>
+        <div class="record-summary">
+          <span><strong id="record-count">0</strong> stored readings</span>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Volts</th>
+              <th>mAmp</th>
+              <th>Frequency</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="records-body">
+            <tr><td colspan="5" class="empty-row">Waiting for readings</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span id="device-name">VFREG</span>
+    <span id="network-endpoint">Network endpoint: loading...</span>
+  </footer>
+  <script src="/app.js"></script>
+</body>
+</html>

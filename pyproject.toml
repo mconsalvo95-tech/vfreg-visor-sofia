@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vfreg-factory-collector"
+version = "1.0.0"
+description = "Local Modbus TCP collector for the VFREG poultry stunning monitor"
+requires-python = ">=3.10"
+dependencies = [
+  "openpyxl>=3.1,<4",
+]
+
+[project.optional-dependencies]
+portable = [
+  "pyinstaller>=6.21,<7",
+]
+
+[tool.setuptools]
+py-modules = [
+  "app",
+  "export_xlsx",
+  "modbus_client",
+  "network_listener",
+  "pcap_summary",
+  "preflight",
+  "simulated_logger",
+  "simulator_sender",
+  "storage",
+]
+
+[tool.vfreg]
+runtime-config = "config.factory.json"
+setup-command = "setup_new_notebook.bat"
+preflight-command = "run_factory_preflight.bat"
+start-command = "start_factory_collector.bat"
+dashboard-url = "http://127.0.0.1:8000"
+
+[tool.vfreg.confirmed-device]
+ip = "192.168.1.7"
+tcp-port = 502
+modbus-unit = 5
+modbus-function = 4
+start-register = 0
+register-count = 3
+
+[tool.vfreg.notebook-network]
+ipv4 = "192.168.1.1"
+prefix-length = 24
+gateway = ""
+dns = ""

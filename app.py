@@ -1,0 +1,386 @@
+from __future__ import annotations
+
+import argparse
+import json
+import mimetypes
+import os
+from datetime import datetime
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
+from network_listener import NetworkCollector, start_network_servers
+from storage import (
+    StorageWriter,
+    export_csv,
+    fetch_events,
+    fetch_recent,
+    fetch_summary,
+)
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+STATIC_ROOT = PROJECT_ROOT / "dashboard"
+ALLOWED_POLL_INTERVALS = (0.5, 1.0, 5.0, 15.0, 30.0, 60.0)
+
+
+def load_config(path: str) -> dict:
+    config_path = Path(path).resolve()
+    with config_path.open("r", encoding="utf-8") as handle:
+        cfg = json.load(handle)
+    for key in ("output_csv", "output_sqlite", "output_xlsx", "raw_journal"):
+        value = Path(cfg[key])
+        if not value.is_absolute():
+            cfg[key] = str(config_path.parent / value)
+    return cfg
+
+
+def connection_state(latest: dict | None, timeout_seconds: float) -> str:
+    if not latest:
+        return "WAITING"
+    try:
+        timestamp = datetime.fromisoformat(latest["timestamp"])
+        age = (datetime.now().astimezone() - timestamp).total_seconds()
+    except (TypeError, ValueError):
+        return "UNKNOWN"
+    return "CONNECTED" if age <= timeout_seconds else "DISCONNECTED"
+
+
+class DashboardServer(ThreadingHTTPServer):
+    cfg: dict
+    config_path: str
+    collector: NetworkCollector
+    writer: StorageWriter
+
+
+class DashboardHandler(BaseHTTPRequestHandler):
+    server_version = "VFREGFactoryCollector/2.0"
+
+    @property
+    def app_server(self) -> DashboardServer:
+        return self.server  # type: ignore[return-value]
+
+    def log_message(self, format: str, *args: object) -> None:
+        return
+
+    def send_bytes(self, body: bytes, content_type: str, filename: str | None = None) -> None:
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        if filename:
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+        self.end_headers()
+        self.wfile.write(body)
+
+    def send_json(self, data: object) -> None:
+        self.send_bytes(
+            json.dumps(data, separators=(",", ":")).encode("utf-8"),
+            "application/json; charset=utf-8",
+        )
+
+    def send_not_found(self) -> None:
+        self.send_error(HTTPStatus.NOT_FOUND, "Not found")
+
+    def send_error_json(self, status: HTTPStatus, message: str) -> None:
+        body = json.dumps({"ok": False, "error": message}).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def read_json_payload(self) -> dict | None:
+        try:
+            content_length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            content_length = 0
+        if content_length <= 0 or content_length > 4096:
+            self.send_error_json(HTTPStatus.BAD_REQUEST, "Invalid request size")
+            return None
+        try:
+            payload = json.loads(self.rfile.read(content_length))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            self.send_error_json(HTTPStatus.BAD_REQUEST, "Invalid JSON")
+            return None
+        if not isinstance(payload, dict):
+            self.send_error_json(HTTPStatus.BAD_REQUEST, "JSON object required")
+            return None
+        return payload
+
+    def status_payload(self) -> dict:
+        cfg = self.app_server.cfg
+        readings = fetch_recent(cfg["output_sqlite"], 180)
+        latest = readings[-1] if readings else None
+        network_snapshot = self.app_server.collector.snapshot()
+        mode = cfg["network"].get("mode", "listener")
+        if mode == "modbus_tcp_client":
+            tcp_state = network_snapshot.get("tcp_listener")
+            if tcp_state == "CLIENT_CONNECTED":
+                current_connection_state = "CONNECTED"
+            elif not latest and tcp_state in {"CLIENT_STARTING", "CLIENT_CONNECTING"}:
+                current_connection_state = "WAITING"
+            else:
+                current_connection_state = "DISCONNECTED"
+        else:
+            current_connection_state = connection_state(
+                latest,
+                float(cfg["network"]["connection_timeout_seconds"]),
+            )
+        return {
+            "site_name": cfg["site_name"],
+            "device_name": cfg["device_name"],
+            "connection_state": current_connection_state,
+            "latest": latest,
+            "readings": readings,
+            "summary": fetch_summary(cfg["output_sqlite"]),
+            "events": fetch_events(cfg["output_sqlite"], 12),
+            "diagnostics": {
+                "network": network_snapshot,
+                "storage": self.app_server.writer.snapshot(),
+            },
+            "network": {
+                "mode": cfg["network"].get("mode", "listener"),
+                "tcp_port": cfg["network"]["tcp_port"],
+                "udp_port": cfg["network"].get("udp_port"),
+                "tcp_host": cfg["network"].get("tcp_host"),
+                "port_confirmed": cfg["network"].get("port_confirmed", False),
+                "poll_interval_seconds": network_snapshot.get(
+                    "poll_interval_seconds",
+                    cfg["network"].get("modbus", {}).get("poll_interval_seconds"),
+                ),
+                "allowed_poll_intervals": ALLOWED_POLL_INTERVALS,
+            },
+            "factory": cfg.get("factory", {}),
+            "limits": cfg["limits"],
+        }
+
+    def do_GET(self) -> None:
+        parsed = urlparse(self.path)
+        cfg = self.app_server.cfg
+        if parsed.path == "/api/status":
+            self.send_json(self.status_payload())
+            return
+
+        if parsed.path == "/api/readings":
+            query = parse_qs(parsed.query)
+            try:
+                limit = int(query.get("limit", ["180"])[0])
+            except ValueError:
+                limit = 180
+            self.send_json(fetch_recent(cfg["output_sqlite"], limit))
+            return
+
+        if parsed.path == "/api/events":
+            self.send_json(fetch_events(cfg["output_sqlite"], 100))
+            return
+
+        if parsed.path == "/api/export.csv":
+            path = Path(export_csv(cfg["output_sqlite"], cfg["output_csv"]))
+            self.send_bytes(path.read_bytes(), "text/csv; charset=utf-8", "vfreg-readings.csv")
+            return
+
+        if parsed.path == "/api/export.xlsx":
+            try:
+                from export_xlsx import build_xlsx
+            except ModuleNotFoundError:
+                self.send_error_json(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    "XLSX export requires openpyxl; run install_dependencies.bat",
+                )
+                return
+            except ImportError as error:
+                self.send_error_json(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    f"Collector modules changed; restart the collector before exporting XLSX: {error}",
+                )
+                return
+            try:
+                path = Path(build_xlsx(cfg))
+            except Exception as error:
+                self.send_error_json(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    f"XLSX generation failed: {error}",
+                )
+                return
+            self.send_bytes(
+                path.read_bytes(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "vfreg-readings.xlsx",
+            )
+            return
+
+        static_files = {
+            "/": "index.html",
+            "/index.html": "index.html",
+            "/styles.css": "styles.css",
+            "/app.js": "app.js",
+        }
+        filename = static_files.get(parsed.path)
+        if not filename:
+            self.send_not_found()
+            return
+        path = STATIC_ROOT / filename
+        content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        if content_type.startswith("text/") or content_type == "application/javascript":
+            content_type += "; charset=utf-8"
+        self.send_bytes(path.read_bytes(), content_type)
+
+    def do_POST(self) -> None:
+        path = urlparse(self.path).path
+        if path not in {"/api/session", "/api/poll-interval"}:
+            self.send_not_found()
+            return
+        payload = self.read_json_payload()
+        if payload is None:
+            return
+
+        if path == "/api/poll-interval":
+            self.update_poll_interval(payload)
+            return
+
+        batch_id = str(payload.get("batch_id", "")).strip()
+        shift = str(payload.get("shift", "")).strip()
+        if len(batch_id) > 80 or len(shift) > 40:
+            self.send_error_json(HTTPStatus.BAD_REQUEST, "Session labels are too long")
+            return
+        try:
+            persist_factory_session(self.app_server.config_path, batch_id, shift)
+        except (OSError, json.JSONDecodeError) as error:
+            self.send_error_json(HTTPStatus.INTERNAL_SERVER_ERROR, str(error))
+            return
+        factory = self.app_server.cfg.setdefault("factory", {})
+        factory["batch_id"] = batch_id
+        factory["shift"] = shift
+        self.app_server.writer.submit_event(
+            "SESSION_UPDATED",
+            "dashboard",
+            f"batch={batch_id or '(empty)'}; shift={shift or '(empty)'}",
+        )
+        self.send_json({"ok": True, "batch_id": batch_id, "shift": shift})
+
+    def update_poll_interval(self, payload: dict) -> None:
+        try:
+            seconds = float(payload["seconds"])
+        except (KeyError, TypeError, ValueError):
+            self.send_error_json(HTTPStatus.BAD_REQUEST, "Invalid polling interval")
+            return
+        if seconds not in ALLOWED_POLL_INTERVALS:
+            allowed = ", ".join(str(value) for value in ALLOWED_POLL_INTERVALS)
+            self.send_error_json(
+                HTTPStatus.BAD_REQUEST,
+                f"Polling interval must be one of: {allowed} seconds",
+            )
+            return
+        setter = getattr(self.app_server.collector, "set_poll_interval", None)
+        if not callable(setter):
+            self.send_error_json(
+                HTTPStatus.CONFLICT,
+                "Live polling control is available only in Modbus client mode",
+            )
+            return
+        try:
+            persist_poll_interval(self.app_server.config_path, seconds)
+            applied = float(setter(seconds))
+        except (OSError, json.JSONDecodeError, ValueError) as error:
+            self.send_error_json(HTTPStatus.INTERNAL_SERVER_ERROR, str(error))
+            return
+        self.app_server.writer.submit_event(
+            "POLL_INTERVAL_UPDATED",
+            "dashboard",
+            f"Modbus polling interval changed to {applied:g} seconds",
+        )
+        self.send_json({"ok": True, "poll_interval_seconds": applied})
+
+
+def persist_factory_session(config_path: str, batch_id: str, shift: str) -> None:
+    path = Path(config_path).resolve()
+    with path.open("r", encoding="utf-8") as handle:
+        cfg = json.load(handle)
+    factory = cfg.setdefault("factory", {})
+    factory["batch_id"] = batch_id
+    factory["shift"] = shift
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    with temporary.open("w", encoding="utf-8") as handle:
+        json.dump(cfg, handle, indent=2)
+        handle.write("\n")
+    os.replace(temporary, path)
+
+
+def persist_poll_interval(config_path: str, seconds: float) -> None:
+    path = Path(config_path).resolve()
+    with path.open("r", encoding="utf-8") as handle:
+        cfg = json.load(handle)
+    cfg.setdefault("network", {}).setdefault("modbus", {})[
+        "poll_interval_seconds"
+    ] = float(seconds)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    with temporary.open("w", encoding="utf-8") as handle:
+        json.dump(cfg, handle, indent=2)
+        handle.write("\n")
+    os.replace(temporary, path)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run the VFREG collector and dashboard")
+    parser.add_argument("--config", default=str(PROJECT_ROOT / "config.json"))
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    config_path = str(Path(args.config).resolve())
+    cfg = load_config(config_path)
+    os.chdir(PROJECT_ROOT)
+    storage_cfg = cfg.get("storage", {})
+    writer = StorageWriter(
+        cfg["output_sqlite"],
+        cfg["raw_journal"],
+        queue_size=int(storage_cfg.get("queue_size", 10000)),
+        batch_size=int(storage_cfg.get("batch_size", 100)),
+        raw_journal_max_bytes=int(
+            storage_cfg.get("raw_journal_max_bytes", 104857600)
+        ),
+        raw_journal_backups=int(storage_cfg.get("raw_journal_backups", 5)),
+    )
+    collector = start_network_servers(cfg, writer)
+    host = cfg["dashboard"]["host"]
+    port = int(cfg["dashboard"]["port"])
+    server = DashboardServer((host, port), DashboardHandler)
+    server.cfg = cfg
+    server.config_path = config_path
+    server.collector = collector
+    server.writer = writer
+    print(f"VFREG dashboard: http://{host}:{port}")
+    if cfg["network"].get("mode") == "modbus_tcp_client":
+        modbus = cfg["network"]["modbus"]
+        first_register = int(modbus["start_register"])
+        last_register = first_register + int(modbus["quantity"]) - 1
+        print(
+            f"Collector: Modbus TCP client {cfg['network']['tcp_host']}:"
+            f"{cfg['network']['tcp_port']} unit {modbus['unit_id']} "
+            f"function {modbus['function_code']} registers "
+            f"{first_register}-{last_register}"
+        )
+    else:
+        print(
+            f"Collector: UDP {cfg['network']['udp_port']} / "
+            f"TCP {cfg['network']['tcp_port']} "
+            f"({'confirmed' if cfg['network'].get('port_confirmed') else 'test port, unconfirmed'})"
+        )
+    print("Raw packet journal:", cfg["raw_journal"])
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nStopping VFREG dashboard.")
+    finally:
+        collector.stop()
+        writer.close()
+        server.server_close()
+
+
+if __name__ == "__main__":
+    main()
