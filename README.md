@@ -36,6 +36,23 @@ Review the copied file before connecting to factory equipment. The template
 contains the confirmed read-only Modbus mapping but excludes deployment-specific
 hardware identifiers and production data.
 
+## Reproducible development environment
+
+This project uses Python 3.13 and `uv`. The authoritative dependency files are
+`pyproject.toml` and the committed `uv.lock`; do not install individual packages
+with `pip`.
+
+After installing `uv`, the complete setup command is:
+
+```powershell
+uv sync --locked
+```
+
+The `dev` dependency group, installed by default, contains PyInstaller. Runtime
+dependencies remain separate. The portable company-PC package is different: it
+already contains Python and does not require Python, `uv`, Git, an IDE, or an
+internet connection.
+
 ## Confirmed factory protocol (2026-08-21)
 
 The real viewer protocol has been correlated with its physical display:
@@ -60,17 +77,17 @@ Run `run_factory_preflight.bat`, then start the real collector with
 `start_factory_collector.bat`. Open `http://127.0.0.1:8000`. Factory data is kept
 separate from simulator data under `data/factory/`.
 
-For a second notebook, copy this project and run `setup_new_notebook.bat`.
-`pyproject.toml` records the reproducible runtime requirements and confirmed
-connection settings; `NEW_NOTEBOOK_SETUP.md` contains the complete migration
-procedure.
+For a second development notebook, clone this project, create the local factory
+configuration, and run `setup_new_notebook.bat`. `NEW_NOTEBOOK_SETUP.md`
+contains the complete procedure. For a factory operator computer, transfer the
+tested portable ZIP instead of the source tree.
 
 ## Start the collector notebook
 
 Before a factory session, run the offline preflight:
 
 ```powershell
-python preflight.py
+uv run --locked python preflight.py
 ```
 
 Or double-click `run_preflight.bat`. The report checks the configured TCP and
@@ -78,16 +95,18 @@ UDP ports (whatever values are currently in `config.json`), storage, free disk
 space, clock/timezone, Excel dependency, local IPv4 addresses, and TCP framing.
 Firewall reachability remains a clearly marked manual check because a local
 bind test cannot prove that packets from the VFREG can cross Windows Firewall.
-Save a machine-readable copy with `python preflight.py --json --output report.json`.
+Save a machine-readable copy with
+`uv run --locked python preflight.py --json --output report.json`.
 
 From PowerShell in this directory:
 
 ```powershell
-python app.py
+uv run --locked python app.py
 ```
 
-On Windows, `install_dependencies.bat` installs the Excel dependency and
-`start_collector.bat` launches the application from the correct directory.
+On Windows, `install_dependencies.bat` performs the locked sync and
+`start_collector.bat` launches the simulator configuration from the correct
+directory.
 
 Then open `http://127.0.0.1:8000` on the same notebook. The listener binds to all
 network interfaces, while the dashboard intentionally remains local to the
@@ -153,6 +172,11 @@ decode counts, received bytes, source address, and sequence gaps.
 ## Verification
 
 ```powershell
-python -m unittest discover -s tests -v
-python -m py_compile app.py network_listener.py storage.py export_xlsx.py simulator_sender.py
+uv run --locked python -m unittest discover -s tests -v
+```
+
+Build the portable Windows folder and ZIP with one command:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build_portable.ps1
 ```

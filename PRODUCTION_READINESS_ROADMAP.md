@@ -1,7 +1,7 @@
 # VFREG Visor — Production Readiness Roadmap
 
 Last updated: 2026-08-24  
-Current status: Successful factory pilot  
+Current status: Phase 2 complete; successful factory pilot preserved
 Target milestone: `v1.0.0`
 
 ## Purpose
@@ -89,15 +89,15 @@ VFREG-VISOR/
 
 Goal: Make development and builds repeatable on another development computer.
 
-- [ ] Adopt `uv` in the existing project rather than creating a competing
+- [x] Adopt `uv` in the existing project rather than creating a competing
   application folder.
-- [ ] Generate and commit `uv.lock`.
-- [ ] Pin the supported Python version.
-- [ ] Separate runtime dependencies from build and test dependencies.
-- [ ] Add one documented setup command.
-- [ ] Add one documented test command.
-- [ ] Add one documented portable-build command.
-- [ ] Verify a clean setup on another development machine or clean virtual
+- [x] Generate and commit `uv.lock`.
+- [x] Pin the supported Python version.
+- [x] Separate runtime dependencies from build and test dependencies.
+- [x] Add one documented setup command.
+- [x] Add one documented test command.
+- [x] Add one documented portable-build command.
+- [x] Verify a clean setup on another development machine or clean virtual
   environment.
 
 ### Acceptance criteria
@@ -356,3 +356,4 @@ Record meaningful production decisions here as they are approved.
 | 2026-08-24 | Use a private GitHub repository named `vfreg-visor-sofia` | Keep source and releases controlled and recoverable | MC95 |
 | 2026-08-24 | Keep production Modbus communication read-only | Protect the electrical process and equipment | MC95 |
 | 2026-08-24 | Use `uv` for development and PyInstaller for Windows deployment | Reproducible development plus offline operation | MC95 |
+| 2026-08-24 | Support Python 3.13 for the production-ready development baseline | Match the successfully tested development and Windows build environment | MC95 |

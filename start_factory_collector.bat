@@ -1,14 +1,12 @@
 @echo off
+setlocal
 cd /d "%~dp0"
-if exist ".venv\Scripts\python.exe" (
-  ".venv\Scripts\python.exe" app.py --config config.factory.json
+where uv >nul 2>nul
+if errorlevel 1 (
+  echo ERROR: uv was not found on PATH.
+  echo Run setup_new_notebook.bat first.
   pause
-  exit /b
+  exit /b 1
 )
-where py >nul 2>nul
-if %errorlevel%==0 (
-  py -3 app.py --config config.factory.json
-) else (
-  python app.py --config config.factory.json
-)
+uv run --locked python app.py --config config.factory.json
 pause

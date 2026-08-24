@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-    [string]$PythonPath = ""
+    [string]$PythonPath = "",
+    [string]$DistRoot = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -8,15 +9,12 @@ $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location -LiteralPath $projectRoot
 
 if (-not $PythonPath) {
-    $candidates = @(
-        (Join-Path $projectRoot ".venv\Scripts\python.exe"),
-        (Join-Path $env:LOCALAPPDATA "Programs\Python\Python313\python.exe")
-    )
+    $candidates = @((Join-Path $projectRoot ".venv\Scripts\python.exe"))
     $PythonPath = $candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 }
 
 if (-not $PythonPath -or -not (Test-Path -LiteralPath $PythonPath)) {
-    throw "Python was not found on the build computer. Pass -PythonPath with its full path."
+    throw "The locked uv environment was not found. Run 'uv sync --locked' first, or pass -PythonPath."
 }
 
 & $PythonPath -m PyInstaller --version | Out-Host
@@ -24,11 +22,15 @@ if ($LASTEXITCODE -ne 0) {
     throw "PyInstaller is not installed. Install the portable build dependencies first."
 }
 
-$distRoot = Join-Path $projectRoot "portable-dist"
+if (-not $DistRoot) {
+    $DistRoot = Join-Path $projectRoot "portable-dist"
+} elseif (-not [System.IO.Path]::IsPathRooted($DistRoot)) {
+    $DistRoot = Join-Path $projectRoot $DistRoot
+}
 $workRoot = Join-Path $projectRoot "build\portable-work"
 $specRoot = Join-Path $projectRoot "build\portable-spec"
 $dashboardSource = Join-Path $projectRoot "dashboard"
-New-Item -ItemType Directory -Force -Path $distRoot, $workRoot, $specRoot | Out-Null
+New-Item -ItemType Directory -Force -Path $DistRoot, $workRoot, $specRoot | Out-Null
 
 & $PythonPath -m PyInstaller `
     --noconfirm `
@@ -36,7 +38,7 @@ New-Item -ItemType Directory -Force -Path $distRoot, $workRoot, $specRoot | Out-
     --onedir `
     --console `
     --name "VFREG-VISOR-SOFIA" `
-    --distpath $distRoot `
+    --distpath $DistRoot `
     --workpath $workRoot `
     --specpath $specRoot `
     --paths $projectRoot `
@@ -48,7 +50,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "PyInstaller failed with exit code $LASTEXITCODE."
 }
 
-$packageRoot = Join-Path $distRoot "VFREG-VISOR-SOFIA"
+$packageRoot = Join-Path $DistRoot "VFREG-VISOR-SOFIA"
 Copy-Item -LiteralPath (Join-Path $projectRoot "config.factory.json") -Destination $packageRoot -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "portable\Start VFREG Visor.bat") -Destination $packageRoot -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "portable\LEEME-EMPRESA.txt") -Destination $packageRoot -Force
@@ -61,7 +63,7 @@ $hash = (Get-FileHash -LiteralPath $executable -Algorithm SHA256).Hash
     "SHA256: $hash"
 ) | Set-Content -LiteralPath (Join-Path $packageRoot "SHA256.txt") -Encoding utf8
 
-$zipPath = Join-Path $distRoot "VFREG-VISOR-SOFIA.zip"
+$zipPath = Join-Path $DistRoot "VFREG-VISOR-SOFIA.zip"
 if (Test-Path -LiteralPath $zipPath) {
     Remove-Item -LiteralPath $zipPath -Force
 }

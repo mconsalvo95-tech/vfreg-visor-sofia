@@ -1,9 +1,12 @@
 @echo off
+setlocal
 cd /d "%~dp0"
-where py >nul 2>nul
-if %errorlevel%==0 (
-  py -3 app.py
-) else (
-  python app.py
+where uv >nul 2>nul
+if errorlevel 1 (
+  echo ERROR: uv was not found on PATH.
+  echo Run setup_new_notebook.bat first.
+  pause
+  exit /b 1
 )
+uv run --locked python app.py
 pause
