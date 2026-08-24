@@ -7,8 +7,8 @@ from datetime import datetime
 
 from openpyxl import load_workbook
 
-from export_xlsx import build_xlsx, sampled_row_numbers
-from storage import Measurement, append_sqlite, now_iso
+from vfreg_visor.exports import build_xlsx, sampled_row_numbers
+from vfreg_visor.storage import Measurement, append_sqlite, now_iso
 
 
 class XlsxExportTests(unittest.TestCase):

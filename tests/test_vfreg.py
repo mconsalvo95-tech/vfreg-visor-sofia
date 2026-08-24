@@ -4,7 +4,6 @@ import csv
 import json
 import os
 import socket
-import sys
 import tempfile
 import threading
 import time
@@ -13,27 +12,37 @@ import sqlite3
 import urllib.request
 from dataclasses import asdict
 from datetime import datetime
+from importlib.metadata import version as package_version
+from pathlib import Path
 
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
-sys.path.insert(0, PROJECT_ROOT)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-from app import (  # noqa: E402
-    DashboardHandler,
-    DashboardServer,
-    connection_state,
+from vfreg_visor import __version__  # noqa: E402
+from vfreg_visor.config import (  # noqa: E402
+    ConfigError,
     load_config,
     persist_poll_interval,
 )
-from modbus_client import (  # noqa: E402
+from vfreg_visor.cli import StartupError, _create_dashboard_server  # noqa: E402
+from vfreg_visor.dashboard import (  # noqa: E402
+    DashboardHandler,
+    DashboardServer,
+    connection_state,
+)
+from vfreg_visor.instance import (  # noqa: E402
+    DeploymentInstanceLock,
+    InstanceAlreadyRunning,
+)
+from vfreg_visor.modbus import (  # noqa: E402
     ModbusTcpCollector,
     build_modbus_request,
     parse_modbus_response,
 )
-from network_listener import parse_payload  # noqa: E402
-from preflight import run_preflight  # noqa: E402
-from simulator_sender import build_packet  # noqa: E402
-from storage import (  # noqa: E402
+from vfreg_visor.network import parse_payload  # noqa: E402
+from vfreg_visor.preflight import run_preflight  # noqa: E402
+from vfreg_visor.simulator import build_packet  # noqa: E402
+from vfreg_visor.storage import (  # noqa: E402
     Measurement,
     StorageWriter,
     append_csv,
@@ -151,6 +160,8 @@ class ModbusTests(unittest.TestCase):
     def test_modbus_write_function_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
             build_modbus_request(1, 5, 6, 0, 1)
+        with self.assertRaises(ValueError):
+            build_modbus_request(1, 5, 3, 0, 1)
 
     def test_poll_interval_can_change_without_restarting_collector(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -434,6 +445,16 @@ class StatusTests(unittest.TestCase):
                     result = json.load(response)
                 self.assertEqual(result["poll_interval_seconds"], 5)
                 self.assertEqual(collector.interval, 5)
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{server.server_port}/api/status", timeout=3
+                ) as response:
+                    status = json.load(response)
+                self.assertEqual(status["app_version"], "0.2.0.dev0")
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{server.server_port}/", timeout=3
+                ) as response:
+                    dashboard_html = response.read().decode("utf-8")
+                self.assertIn('id="app-version"', dashboard_html)
                 with open(config_path, "r", encoding="utf-8") as handle:
                     saved = json.load(handle)
                 self.assertEqual(
@@ -488,7 +509,7 @@ class PortableConfigTests(unittest.TestCase):
                     handle,
                 )
 
-            loaded = load_config(config_path)
+            loaded = load_config(config_path, validate=False)
 
             self.assertEqual(
                 loaded["output_sqlite"],
@@ -498,6 +519,64 @@ class PortableConfigTests(unittest.TestCase):
                 loaded["output_xlsx"],
                 os.path.join(directory, "data", "factory", "readings.xlsx"),
             )
+
+
+class StartupSafetyTests(unittest.TestCase):
+    def _factory_config(self) -> dict:
+        with (PROJECT_ROOT / "config.example.json").open("r", encoding="utf-8") as handle:
+            return json.load(handle)
+
+    def test_application_and_package_versions_match(self) -> None:
+        self.assertEqual(__version__, package_version("vfreg-factory-collector"))
+
+    def test_production_configuration_rejects_alternate_modbus_function(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            cfg = self._factory_config()
+            cfg["network"]["modbus"]["function_code"] = 3
+            path = Path(directory) / "config.factory.json"
+            path.write_text(json.dumps(cfg), encoding="utf-8")
+            with self.assertRaisesRegex(ConfigError, "function must be 04"):
+                load_config(path)
+
+    def test_dashboard_must_remain_local_only(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            cfg = self._factory_config()
+            cfg["dashboard"]["host"] = "0.0.0.0"
+            path = Path(directory) / "config.factory.json"
+            path.write_text(json.dumps(cfg), encoding="utf-8")
+            with self.assertRaisesRegex(ConfigError, "127.0.0.1"):
+                load_config(path)
+
+    def test_invalid_storage_value_has_specific_configuration_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            cfg = self._factory_config()
+            cfg["storage"]["queue_size"] = "many"
+            path = Path(directory) / "config.factory.json"
+            path.write_text(json.dumps(cfg), encoding="utf-8")
+            with self.assertRaisesRegex(ConfigError, "storage.queue_size"):
+                load_config(path)
+
+    def test_second_instance_is_rejected_for_same_deployment(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            first = DeploymentInstanceLock(directory)
+            second = DeploymentInstanceLock(directory)
+            first.acquire()
+            try:
+                with self.assertRaises(InstanceAlreadyRunning):
+                    second.acquire()
+            finally:
+                first.release()
+
+    def test_occupied_dashboard_port_has_actionable_error(self) -> None:
+        occupied = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        occupied.bind(("127.0.0.1", 0))
+        occupied.listen(1)
+        port = occupied.getsockname()[1]
+        try:
+            with self.assertRaisesRegex(StartupError, "already occupied"):
+                _create_dashboard_server("127.0.0.1", port)
+        finally:
+            occupied.close()
 
 
 if __name__ == "__main__":

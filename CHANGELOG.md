@@ -13,6 +13,12 @@ release.
   and portable-build dependency.
 - Standardized setup, test, preflight, collector, and portable-build commands
   on the locked environment.
+- Reorganized Python code into the `src/vfreg_visor` application package with a
+  single `vfreg-visor` entry point.
+- Added application version reporting to the CLI, backend, and dashboard.
+- Added startup configuration validation, local-only dashboard enforcement,
+  writable data-path checks, single-instance protection, and clear occupied-port
+  diagnostics.
 
 ## 0.1.0-pilot-success — 2026-08-24
 

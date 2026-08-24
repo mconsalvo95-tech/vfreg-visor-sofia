@@ -1,17 +1,22 @@
 from __future__ import annotations
 
-import argparse
 import json
 import mimetypes
-import os
+import sys
 from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from network_listener import NetworkCollector, start_network_servers
-from storage import (
+from . import __version__
+from .config import (
+    ALLOWED_POLL_INTERVALS,
+    persist_factory_session,
+    persist_poll_interval,
+)
+from .network import NetworkCollector
+from .storage import (
     StorageWriter,
     export_csv,
     fetch_events,
@@ -20,20 +25,10 @@ from storage import (
 )
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent
-STATIC_ROOT = PROJECT_ROOT / "dashboard"
-ALLOWED_POLL_INTERVALS = (0.5, 1.0, 5.0, 15.0, 30.0, 60.0)
-
-
-def load_config(path: str) -> dict:
-    config_path = Path(path).resolve()
-    with config_path.open("r", encoding="utf-8") as handle:
-        cfg = json.load(handle)
-    for key in ("output_csv", "output_sqlite", "output_xlsx", "raw_journal"):
-        value = Path(cfg[key])
-        if not value.is_absolute():
-            cfg[key] = str(config_path.parent / value)
-    return cfg
+if getattr(sys, "frozen", False):
+    STATIC_ROOT = Path(getattr(sys, "_MEIPASS")) / "dashboard"
+else:
+    STATIC_ROOT = Path(__file__).resolve().parents[2] / "dashboard"
 
 
 def connection_state(latest: dict | None, timeout_seconds: float) -> str:
@@ -55,7 +50,7 @@ class DashboardServer(ThreadingHTTPServer):
 
 
 class DashboardHandler(BaseHTTPRequestHandler):
-    server_version = "VFREGFactoryCollector/2.0"
+    server_version = f"VFREGVisor/{__version__}"
 
     @property
     def app_server(self) -> DashboardServer:
@@ -131,6 +126,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 float(cfg["network"]["connection_timeout_seconds"]),
             )
         return {
+            "app_version": __version__,
             "site_name": cfg["site_name"],
             "device_name": cfg["device_name"],
             "connection_state": current_connection_state,
@@ -185,7 +181,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/export.xlsx":
             try:
-                from export_xlsx import build_xlsx
+                from .exports import build_xlsx
             except ModuleNotFoundError:
                 self.send_error_json(
                     HTTPStatus.SERVICE_UNAVAILABLE,
@@ -294,93 +290,3 @@ class DashboardHandler(BaseHTTPRequestHandler):
             f"Modbus polling interval changed to {applied:g} seconds",
         )
         self.send_json({"ok": True, "poll_interval_seconds": applied})
-
-
-def persist_factory_session(config_path: str, batch_id: str, shift: str) -> None:
-    path = Path(config_path).resolve()
-    with path.open("r", encoding="utf-8") as handle:
-        cfg = json.load(handle)
-    factory = cfg.setdefault("factory", {})
-    factory["batch_id"] = batch_id
-    factory["shift"] = shift
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    with temporary.open("w", encoding="utf-8") as handle:
-        json.dump(cfg, handle, indent=2)
-        handle.write("\n")
-    os.replace(temporary, path)
-
-
-def persist_poll_interval(config_path: str, seconds: float) -> None:
-    path = Path(config_path).resolve()
-    with path.open("r", encoding="utf-8") as handle:
-        cfg = json.load(handle)
-    cfg.setdefault("network", {}).setdefault("modbus", {})[
-        "poll_interval_seconds"
-    ] = float(seconds)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    with temporary.open("w", encoding="utf-8") as handle:
-        json.dump(cfg, handle, indent=2)
-        handle.write("\n")
-    os.replace(temporary, path)
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the VFREG collector and dashboard")
-    parser.add_argument("--config", default=str(PROJECT_ROOT / "config.json"))
-    return parser.parse_args()
-
-
-def main() -> None:
-    args = parse_args()
-    config_path = str(Path(args.config).resolve())
-    cfg = load_config(config_path)
-    os.chdir(PROJECT_ROOT)
-    storage_cfg = cfg.get("storage", {})
-    writer = StorageWriter(
-        cfg["output_sqlite"],
-        cfg["raw_journal"],
-        queue_size=int(storage_cfg.get("queue_size", 10000)),
-        batch_size=int(storage_cfg.get("batch_size", 100)),
-        raw_journal_max_bytes=int(
-            storage_cfg.get("raw_journal_max_bytes", 104857600)
-        ),
-        raw_journal_backups=int(storage_cfg.get("raw_journal_backups", 5)),
-    )
-    collector = start_network_servers(cfg, writer)
-    host = cfg["dashboard"]["host"]
-    port = int(cfg["dashboard"]["port"])
-    server = DashboardServer((host, port), DashboardHandler)
-    server.cfg = cfg
-    server.config_path = config_path
-    server.collector = collector
-    server.writer = writer
-    print(f"VFREG dashboard: http://{host}:{port}")
-    if cfg["network"].get("mode") == "modbus_tcp_client":
-        modbus = cfg["network"]["modbus"]
-        first_register = int(modbus["start_register"])
-        last_register = first_register + int(modbus["quantity"]) - 1
-        print(
-            f"Collector: Modbus TCP client {cfg['network']['tcp_host']}:"
-            f"{cfg['network']['tcp_port']} unit {modbus['unit_id']} "
-            f"function {modbus['function_code']} registers "
-            f"{first_register}-{last_register}"
-        )
-    else:
-        print(
-            f"Collector: UDP {cfg['network']['udp_port']} / "
-            f"TCP {cfg['network']['tcp_port']} "
-            f"({'confirmed' if cfg['network'].get('port_confirmed') else 'test port, unconfirmed'})"
-        )
-    print("Raw packet journal:", cfg["raw_journal"])
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print("\nStopping VFREG dashboard.")
-    finally:
-        collector.stop()
-        writer.close()
-        server.server_close()
-
-
-if __name__ == "__main__":
-    main()

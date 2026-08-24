@@ -53,6 +53,16 @@ dependencies remain separate. The portable company-PC package is different: it
 already contains Python and does not require Python, `uv`, Git, an IDE, or an
 internet connection.
 
+Application code is organized under `src/vfreg_visor/`. The supported source
+entry point is `vfreg-visor`; configuration, dashboard/API, device communication,
+storage, and exports are separate modules. Version `0.2.0.dev0` is reported by
+the command line, backend status API, and dashboard footer.
+
+Startup validates the configuration before contacting the device. It enforces
+local-only dashboard access, production Modbus function `04`, writable runtime
+paths relative to the deployment configuration, one collector per deployment
+directory, and an actionable error when the dashboard port is occupied.
+
 ## Confirmed factory protocol (2026-08-21)
 
 The real viewer protocol has been correlated with its physical display:
@@ -87,7 +97,7 @@ tested portable ZIP instead of the source tree.
 Before a factory session, run the offline preflight:
 
 ```powershell
-uv run --locked python preflight.py
+uv run --locked vfreg-preflight
 ```
 
 Or double-click `run_preflight.bat`. The report checks the configured TCP and
@@ -96,12 +106,12 @@ space, clock/timezone, Excel dependency, local IPv4 addresses, and TCP framing.
 Firewall reachability remains a clearly marked manual check because a local
 bind test cannot prove that packets from the VFREG can cross Windows Firewall.
 Save a machine-readable copy with
-`uv run --locked python preflight.py --json --output report.json`.
+`uv run --locked vfreg-preflight --json --output report.json`.
 
 From PowerShell in this directory:
 
 ```powershell
-uv run --locked python app.py
+uv run --locked vfreg-visor
 ```
 
 On Windows, `install_dependencies.bat` performs the locked sync and
@@ -119,7 +129,7 @@ Run the collector on the notebook. On the desktop, send data to the notebook's
 LAN address:
 
 ```powershell
-python simulator_sender.py --host NOTEBOOK_IP --protocol tcp --scenario mixed
+uv run --locked vfreg-simulator --host NOTEBOOK_IP --protocol tcp --scenario mixed
 ```
 
 Wireshark can verify the route with the display filter:
@@ -134,7 +144,7 @@ The same test can use `--protocol udp` and `udp.port == 5000`.
 
 1. Run Wireshark before connecting the VFREG and capture the notebook Ethernet interface.
 2. Connect the VFREG directly to the notebook with Ethernet.
-3. Start `app.py` and keep the dashboard open.
+3. Start `vfreg-visor` and keep the dashboard open.
 4. Confirm the actual VFREG IP, destination IP, protocol, port, and whether payload bytes are visible.
 5. Save the `.pcapng`, the `data/raw_packets.jsonl` journal, and an XLSX export.
 6. Do not mark `port_confirmed` as `true` until the real capture proves the port.
@@ -173,6 +183,7 @@ decode counts, received bytes, source address, and sequence gaps.
 
 ```powershell
 uv run --locked python -m unittest discover -s tests -v
+uv run --locked python -m compileall -q src
 ```
 
 Build the portable Windows folder and ZIP with one command:

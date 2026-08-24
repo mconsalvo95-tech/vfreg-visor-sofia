@@ -4,30 +4,25 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vfreg-factory-collector"
-version = "0.1.0"
+version = "0.2.0.dev0"
 description = "Local Modbus TCP collector for the VFREG poultry stunning monitor"
 requires-python = ">=3.13,<3.14"
 dependencies = [
   "openpyxl>=3.1,<4",
 ]
 
+[project.scripts]
+vfreg-visor = "vfreg_visor.cli:main"
+vfreg-preflight = "vfreg_visor.preflight:main"
+vfreg-simulator = "vfreg_visor.simulator:main"
+
 [dependency-groups]
 dev = [
   "pyinstaller>=6.21,<7",
 ]
 
-[tool.setuptools]
-py-modules = [
-  "app",
-  "export_xlsx",
-  "modbus_client",
-  "network_listener",
-  "pcap_summary",
-  "preflight",
-  "simulated_logger",
-  "simulator_sender",
-  "storage",
-]
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.vfreg]
 runtime-config = "config.factory.json"

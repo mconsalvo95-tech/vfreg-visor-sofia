@@ -13,6 +13,7 @@ const elements = {
   recordsBody: document.querySelector("#records-body"),
   recordCount: document.querySelector("#record-count"),
   networkEndpoint: document.querySelector("#network-endpoint"),
+  appVersion: document.querySelector("#app-version"),
   emptyChart: document.querySelector("#empty-chart"),
   canvas: document.querySelector("#history-chart"),
   xlsxExport: document.querySelector("#xlsx-export"),
@@ -103,6 +104,7 @@ function renderStatus(data) {
 
   elements.siteName.textContent = data.site_name;
   elements.deviceName.textContent = data.device_name;
+  elements.appVersion.textContent = `VFREG Visor ${data.app_version}`;
   elements.connection.dataset.state = state;
   elements.connectionLabel.textContent = stateLabel;
   elements.statusValue.textContent = stateLabel;

@@ -11,18 +11,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-
-PROJECT_ROOT = Path(__file__).resolve().parent
+from .config import ConfigError, default_config_path, load_config
 
 
 def result(name: str, status: str, detail: str, **data: Any) -> dict[str, Any]:
     return {"name": name, "status": status, "detail": detail, **data}
-
-
-def load_config(path: str | Path) -> tuple[Path, dict[str, Any]]:
-    config_path = Path(path).resolve()
-    with config_path.open("r", encoding="utf-8") as handle:
-        return config_path, json.load(handle)
 
 
 def resolve_path(config_path: Path, value: str) -> Path:
@@ -71,7 +64,8 @@ def local_ipv4_addresses() -> list[str]:
 
 
 def run_preflight(config_path: str | Path) -> dict[str, Any]:
-    path, cfg = load_config(config_path)
+    path = Path(config_path).resolve()
+    cfg = load_config(path, validate=False)
     checks: list[dict[str, Any]] = []
     now = datetime.now().astimezone()
     checks.append(result("clock", "PASS" if now.utcoffset() is not None else "WARN", now.isoformat(timespec="seconds"), timestamp=now.isoformat()))
@@ -138,7 +132,7 @@ def run_preflight(config_path: str | Path) -> dict[str, Any]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Check the VFREG notebook before a factory session")
-    parser.add_argument("--config", default=str(PROJECT_ROOT / "config.json"))
+    parser.add_argument("--config", default=str(default_config_path()))
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON")
     parser.add_argument("--output", help="Also save the JSON report to this path")
     return parser.parse_args()
@@ -148,7 +142,7 @@ def main() -> int:
     args = parse_args()
     try:
         report = run_preflight(args.config)
-    except (OSError, json.JSONDecodeError) as error:
+    except (ConfigError, OSError, json.JSONDecodeError) as error:
         print(f"Preflight failed: {error}")
         return 2
     encoded = json.dumps(report, indent=2)
