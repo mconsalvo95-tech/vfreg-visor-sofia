@@ -1,8 +1,8 @@
 # VFREG Visor — Project Handoff
 
 Last updated: 2026-08-24
-Current development version: `0.2.0.dev0`
-Production-readiness status: Phase 3 complete
+Current development version: `0.3.0.dev0`
+Production-readiness status: Phase 4 complete
 
 ## User communication
 
@@ -82,15 +82,18 @@ Wireshark on the factory computer.
 
 - The company-PC pilot succeeded with the real viewer.
 - Phase 2 reproducible environment was merged through PR #1.
-- Phase 3 clean environment passes 32 automated tests.
+- Phase 4 validation passes 36 automated tests, including HTTP-level filtered
+  readings, CSV, XLSX, and invalid-range cases.
 - Both simulator and factory configurations pass the new schema validation.
-- The reorganized PyInstaller package builds and its executable reports
-  `VFREG Visor 0.2.0.dev0` in an offline smoke test.
+- The Phase 4 PyInstaller package builds and its executable reports
+  `VFREG Visor 0.3.0.dev0` in an offline smoke test.
+- An 18,522-reading XLSX export was validated with all readings preserved and
+  2,000 sampled chart points.
 - Existing database schema, relative data paths, exports, and confirmed Modbus
   mapping remain compatible.
 
 ## Next work
 
-Follow `PRODUCTION_READINESS_ROADMAP.md`. The next phase is Phase 4: management
-historical filtering, SQLite-backed date/time queries, and filtered CSV/XLSX
-exports. Do not mix Phase 4 behavior changes into Phase 3 maintenance fixes.
+Follow `PRODUCTION_READINESS_ROADMAP.md`. The next phase is Phase 5: data
+integrity, retention, storage budgets, and backup/recovery behavior. Keep the
+production Modbus path strictly read-only while that work proceeds.

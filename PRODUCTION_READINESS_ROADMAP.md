@@ -138,17 +138,19 @@ Goal: Improve maintainability without changing the confirmed device protocol.
 
 Goal: Make the application useful without exposing unnecessary backend detail.
 
-- [ ] Add historical filtering above **Recent readings**.
-- [ ] Add presets: last 5 minutes, 15 minutes, 30 minutes, 1 hour, and today.
-- [ ] Add custom **From** and **To** date/time fields.
-- [ ] Query SQLite history instead of filtering only visible browser rows.
-- [ ] Show the number of matching records.
-- [ ] Add a clear/reset-filter action.
-- [ ] Allow CSV and XLSX exports to use the selected time period.
-- [ ] Keep Volts, mAmp, frequency, timestamp, and connection status prominent.
-- [ ] Keep technical diagnostics hidden from the normal management view.
-- [ ] Add a discreet application version and support link.
-- [ ] Review chart appearance only after the operational features are stable.
+- [x] Add historical filtering above **Recent readings**.
+- [x] Add presets: last 5 minutes, 15 minutes, 30 minutes, 1 hour, and today.
+- [x] Add custom **From** and **To** date/time fields.
+- [x] Query SQLite history instead of filtering only visible browser rows.
+- [x] Show the number of matching records.
+- [x] Add a clear/reset-filter action.
+- [x] Allow CSV and XLSX exports to use the selected time period.
+- [x] Keep Volts, mAmp, frequency, timestamp, and connection status prominent.
+- [x] Keep technical diagnostics hidden from the normal management view.
+- [x] Add a discreet application version and support link.
+- [x] Review chart appearance only after the operational features are stable.
+  Appearance changes remain intentionally deferred; operational filtering and
+  export behavior are now stable and tested.
 
 ### Acceptance criteria
 
@@ -324,7 +326,7 @@ Release `v1.0.0` only when every item below is complete:
 - [x] Reproducible `uv` environment and lockfile exist.
 - [x] Automated tests pass.
 - [x] Read-only Modbus behavior is verified.
-- [ ] Historical filtering and filtered exports work.
+- [x] Historical filtering and filtered exports work.
 - [ ] Reconnection and automatic startup work.
 - [ ] Retention, backup, and recovery are documented and tested.
 - [ ] A multi-day soak test succeeds.

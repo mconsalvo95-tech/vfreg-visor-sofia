@@ -330,25 +330,51 @@ class StorageWriter:
                         self._queue.task_done()
 
 
-def fetch_recent(path: str, limit: int = 180) -> list[dict[str, Any]]:
+def _measurement_filter(
+    start_time: str | None = None,
+    end_time: str | None = None,
+) -> tuple[str, list[str]]:
+    clauses: list[str] = []
+    parameters: list[str] = []
+    if start_time:
+        clauses.append("timestamp >= ?")
+        parameters.append(start_time)
+    if end_time:
+        clauses.append("timestamp <= ?")
+        parameters.append(end_time)
+    return (f" WHERE {' AND '.join(clauses)}" if clauses else "", parameters)
+
+
+def fetch_recent(
+    path: str,
+    limit: int = 180,
+    start_time: str | None = None,
+    end_time: str | None = None,
+) -> list[dict[str, Any]]:
     init_sqlite(path)
     safe_limit = max(1, min(int(limit), 5000))
     columns = ",".join(["id"] + CSV_FIELDS)
+    where, parameters = _measurement_filter(start_time, end_time)
     with closing(connect_sqlite(path)) as con:
         con.row_factory = sqlite3.Row
         rows = con.execute(
-            f"SELECT {columns} FROM measurements ORDER BY id DESC LIMIT ?",
-            (safe_limit,),
+            f"SELECT {columns} FROM measurements{where} ORDER BY id DESC LIMIT ?",
+            (*parameters, safe_limit),
         ).fetchall()
     return [dict(row) for row in reversed(rows)]
 
 
-def fetch_summary(path: str) -> dict[str, Any]:
+def fetch_summary(
+    path: str,
+    start_time: str | None = None,
+    end_time: str | None = None,
+) -> dict[str, Any]:
     init_sqlite(path)
+    where, parameters = _measurement_filter(start_time, end_time)
     with closing(connect_sqlite(path)) as con:
         con.row_factory = sqlite3.Row
         row = con.execute(
-            """
+            f"""
             SELECT
                 COUNT(*) AS count,
                 SUM(CASE WHEN alarm_status = 'ALARM' THEN 1 ELSE 0 END) AS alarm_count,
@@ -358,7 +384,9 @@ def fetch_summary(path: str) -> dict[str, Any]:
                 MIN(timestamp) AS first_timestamp,
                 MAX(timestamp) AS last_timestamp
             FROM measurements
-            """
+            {where}
+            """,
+            parameters,
         ).fetchone()
     return dict(row)
 
@@ -387,25 +415,38 @@ def iter_events(path: str):
         con.close()
 
 
-def iter_measurements(path: str):
+def iter_measurements(
+    path: str,
+    start_time: str | None = None,
+    end_time: str | None = None,
+):
     init_sqlite(path)
     con = connect_sqlite(path)
     con.row_factory = sqlite3.Row
     columns = ",".join(CSV_FIELDS)
+    where, parameters = _measurement_filter(start_time, end_time)
     try:
-        cursor = con.execute(f"SELECT {columns} FROM measurements ORDER BY id")
+        cursor = con.execute(
+            f"SELECT {columns} FROM measurements{where} ORDER BY id",
+            parameters,
+        )
         for row in cursor:
             yield dict(row)
     finally:
         con.close()
 
 
-def export_csv(path: str, destination: str) -> str:
+def export_csv(
+    path: str,
+    destination: str,
+    start_time: str | None = None,
+    end_time: str | None = None,
+) -> str:
     ensure_parent(destination)
     with open(destination, "w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow([heading for heading, _field in MANAGER_EXPORT_COLUMNS])
-        for row in iter_measurements(path):
+        for row in iter_measurements(path, start_time, end_time):
             writer.writerow(
                 [
                     format_manager_timestamp(row.get(field))

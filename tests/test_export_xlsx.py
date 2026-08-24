@@ -46,7 +46,7 @@ class XlsxExportTests(unittest.TestCase):
 
             self.assertEqual(
                 workbook.sheetnames,
-                ["Summary", "Readings", "Charts", "Chart Data"],
+                ["Readings", "Charts", "Chart Data"],
             )
             self.assertEqual(len(workbook["Charts"]._charts), 3)
             self.assertEqual(workbook["Chart Data"].sheet_state, "hidden")
@@ -61,6 +61,32 @@ class XlsxExportTests(unittest.TestCase):
                 workbook["Readings"]["A2"].number_format,
                 'yyyy-mm-dd"T"hh:mm:ss',
             )
+
+    def test_factory_export_respects_selected_time_period(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            sqlite_path = os.path.join(directory, "readings.sqlite")
+            xlsx_path = os.path.join(directory, "readings.xlsx")
+            for sequence, timestamp in enumerate(
+                (
+                    "2026-08-21T10:00:00.000-03:00",
+                    "2026-08-21T11:00:00.000-03:00",
+                    "2026-08-21T12:00:00.000-03:00",
+                ),
+                start=1,
+            ):
+                append_sqlite(
+                    sqlite_path,
+                    Measurement(timestamp, "modbus", sequence, 35, 340, 202),
+                )
+            cfg = {"output_sqlite": sqlite_path, "output_xlsx": xlsx_path}
+            build_xlsx(
+                cfg,
+                start_time="2026-08-21T10:30:00.000000-03:00",
+                end_time="2026-08-21T11:30:00.999999-03:00",
+            )
+            workbook = load_workbook(xlsx_path)
+            self.assertEqual(workbook["Readings"].max_row, 2)
+            self.assertEqual(workbook["Readings"]["A2"].value.hour, 11)
 
     def test_chart_sampling_preserves_first_and_last_rows(self) -> None:
         rows = sampled_row_numbers(60001, max_points=2000)

@@ -9,12 +9,16 @@ import threading
 import time
 import unittest
 import sqlite3
+import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import asdict
 from datetime import datetime
 from importlib.metadata import version as package_version
+from io import BytesIO
 from pathlib import Path
 
+from openpyxl import load_workbook
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -29,6 +33,7 @@ from vfreg_visor.dashboard import (  # noqa: E402
     DashboardHandler,
     DashboardServer,
     connection_state,
+    parse_time_range,
 )
 from vfreg_visor.instance import (  # noqa: E402
     DeploymentInstanceLock,
@@ -382,6 +387,33 @@ class StorageTests(unittest.TestCase):
                 rows = list(csv.reader(handle))
             self.assertEqual(rows[1][0], "2026-08-21T11:38:10")
 
+    def test_history_range_filters_sqlite_and_csv(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            sqlite_path = os.path.join(directory, "readings.sqlite")
+            csv_path = os.path.join(directory, "readings.csv")
+            for sequence, timestamp in enumerate(
+                (
+                    "2026-08-21T10:00:00.000-03:00",
+                    "2026-08-21T11:00:00.000-03:00",
+                    "2026-08-21T12:00:00.000-03:00",
+                ),
+                start=1,
+            ):
+                append_sqlite(
+                    sqlite_path,
+                    Measurement(timestamp, "test", sequence, 35, 340, 202),
+                )
+            start = "2026-08-21T10:30:00.000000-03:00"
+            end = "2026-08-21T11:30:00.999999-03:00"
+            rows = fetch_recent(sqlite_path, 10, start, end)
+            self.assertEqual([row["sequence"] for row in rows], [2])
+            self.assertEqual(fetch_summary(sqlite_path, start, end)["count"], 1)
+            export_csv(sqlite_path, csv_path, start, end)
+            with open(csv_path, "r", encoding="utf-8") as handle:
+                exported = list(csv.reader(handle))
+            self.assertEqual(len(exported), 2)
+            self.assertEqual(exported[1][0], "2026-08-21T11:00:00")
+
 
 class StatusTests(unittest.TestCase):
     def test_recent_measurement_is_connected(self) -> None:
@@ -390,6 +422,112 @@ class StatusTests(unittest.TestCase):
 
     def test_missing_measurement_is_waiting(self) -> None:
         self.assertEqual(connection_state(None, 3), "WAITING")
+
+    def test_time_range_validation_is_inclusive_and_rejects_reverse_range(self) -> None:
+        start, end = parse_time_range(
+            {"from": ["2026-08-21T11:00:00"], "to": ["2026-08-21T12:00:00"]}
+        )
+        self.assertEqual(datetime.fromisoformat(start).microsecond, 0)
+        self.assertEqual(datetime.fromisoformat(end).microsecond, 999999)
+        with self.assertRaisesRegex(ValueError, "before"):
+            parse_time_range(
+                {"from": ["2026-08-21T13:00:00"], "to": ["2026-08-21T12:00:00"]}
+            )
+
+    def test_history_api_and_exports_use_selected_period(self) -> None:
+        class FakeCollector:
+            def snapshot(self) -> dict:
+                return {
+                    "tcp_listener": "CLIENT_CONNECTED",
+                    "poll_interval_seconds": 5,
+                }
+
+        with tempfile.TemporaryDirectory() as directory:
+            sqlite_path = os.path.join(directory, "readings.sqlite")
+            for sequence, timestamp in enumerate(
+                (
+                    "2026-08-21T10:00:00",
+                    "2026-08-21T11:00:00",
+                    "2026-08-21T12:00:00",
+                ),
+                start=1,
+            ):
+                append_sqlite(
+                    sqlite_path,
+                    Measurement(
+                        datetime.fromisoformat(timestamp)
+                        .astimezone()
+                        .isoformat(timespec="milliseconds"),
+                        "test",
+                        sequence,
+                        35,
+                        340,
+                        202,
+                    ),
+                )
+            cfg = {
+                "site_name": "test",
+                "device_name": "test",
+                "output_sqlite": sqlite_path,
+                "output_csv": os.path.join(directory, "readings.csv"),
+                "output_xlsx": os.path.join(directory, "readings.xlsx"),
+                "network": {
+                    "mode": "modbus_tcp_client",
+                    "tcp_host": "127.0.0.1",
+                    "tcp_port": 502,
+                    "connection_timeout_seconds": 3,
+                    "modbus": {"poll_interval_seconds": 5},
+                },
+                "factory": {},
+                "limits": {"confirmed": False},
+            }
+            writer = StorageWriter(sqlite_path, os.path.join(directory, "raw.jsonl"))
+            server = DashboardServer(("127.0.0.1", 0), DashboardHandler)
+            server.cfg = cfg
+            server.config_path = os.path.join(directory, "config.factory.json")
+            server.collector = FakeCollector()
+            server.writer = writer
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            query = urllib.parse.urlencode(
+                {
+                    "from": "2026-08-21T10:30:00",
+                    "to": "2026-08-21T11:30:00",
+                    "limit": 5000,
+                }
+            )
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                with urllib.request.urlopen(
+                    f"{base}/api/readings?{query}", timeout=3
+                ) as response:
+                    result = json.load(response)
+                self.assertEqual(result["count"], 1)
+                self.assertEqual(result["readings"][0]["sequence"], 2)
+
+                with urllib.request.urlopen(
+                    f"{base}/api/export.csv?{query}", timeout=3
+                ) as response:
+                    exported_csv = response.read().decode("utf-8").splitlines()
+                self.assertEqual(len(exported_csv), 2)
+
+                with urllib.request.urlopen(
+                    f"{base}/api/export.xlsx?{query}", timeout=3
+                ) as response:
+                    workbook = load_workbook(BytesIO(response.read()))
+                self.assertEqual(workbook["Readings"].max_row, 2)
+
+                invalid = urllib.parse.urlencode(
+                    {"from": "2026-08-21T12:00:00", "to": "2026-08-21T11:00:00"}
+                )
+                with self.assertRaises(urllib.error.HTTPError) as raised:
+                    urllib.request.urlopen(f"{base}/api/readings?{invalid}", timeout=3)
+                self.assertEqual(raised.exception.code, 400)
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+                writer.close()
 
     def test_poll_interval_api_persists_and_applies_live(self) -> None:
         class FakeCollector:
@@ -449,12 +587,14 @@ class StatusTests(unittest.TestCase):
                     f"http://127.0.0.1:{server.server_port}/api/status", timeout=3
                 ) as response:
                     status = json.load(response)
-                self.assertEqual(status["app_version"], "0.2.0.dev0")
+                self.assertEqual(status["app_version"], "0.3.0.dev0")
                 with urllib.request.urlopen(
                     f"http://127.0.0.1:{server.server_port}/", timeout=3
                 ) as response:
                     dashboard_html = response.read().decode("utf-8")
                 self.assertIn('id="app-version"', dashboard_html)
+                self.assertIn('id="history-filter-form"', dashboard_html)
+                self.assertIn(">Support</a>", dashboard_html)
                 with open(config_path, "r", encoding="utf-8") as handle:
                     saved = json.load(handle)
                 self.assertEqual(

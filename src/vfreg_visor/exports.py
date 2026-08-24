@@ -9,42 +9,25 @@ from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from .config import default_config_path, load_config
-from .storage import (
-    MANAGER_EXPORT_COLUMNS,
-    fetch_summary,
-    format_manager_timestamp,
-    iter_measurements,
-)
+from .storage import MANAGER_EXPORT_COLUMNS, format_manager_timestamp, iter_measurements
 
 
-def build_xlsx(cfg: dict, output_path: str | None = None) -> str:
+def build_xlsx(
+    cfg: dict,
+    output_path: str | None = None,
+    start_time: str | None = None,
+    end_time: str | None = None,
+) -> str:
     sqlite_path = cfg["output_sqlite"]
     workbook = Workbook(write_only=False)
-    summary_sheet = workbook.active
-    summary_sheet.title = "Summary"
-    readings_sheet = workbook.create_sheet("Readings")
+    readings_sheet = workbook.active
+    readings_sheet.title = "Readings"
     chart_sheet = workbook.create_sheet("Charts")
-
-    summary = fetch_summary(sqlite_path)
-    summary_rows = [
-        ("VFREG collection report", ""),
-        ("Generated at", datetime.now().astimezone().strftime("%Y-%m-%dT%H:%M:%S")),
-        ("Site", cfg.get("site_name", "")),
-        ("Device", cfg.get("device_name", "")),
-        ("Measurement records", summary.get("count", 0)),
-        ("First reading", format_manager_timestamp(summary.get("first_timestamp", ""))),
-        ("Last reading", format_manager_timestamp(summary.get("last_timestamp", ""))),
-    ]
-    for row in summary_rows:
-        summary_sheet.append(row)
-    summary_sheet["A1"].font = Font(size=16, bold=True, color="17324D")
-    summary_sheet.column_dimensions["A"].width = 32
-    summary_sheet.column_dimensions["B"].width = 42
 
     export_headers = [heading for heading, _field in MANAGER_EXPORT_COLUMNS]
     export_fields = [field for _heading, field in MANAGER_EXPORT_COLUMNS]
     readings_sheet.append(export_headers)
-    for row in iter_measurements(sqlite_path):
+    for row in iter_measurements(sqlite_path, start_time, end_time):
         values = [row.get(field) for field in export_fields]
         values[0] = excel_datetime(values[0])
         readings_sheet.append(values)

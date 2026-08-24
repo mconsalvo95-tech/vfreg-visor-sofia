@@ -19,6 +19,13 @@ release.
 - Added startup configuration validation, local-only dashboard enforcement,
   writable data-path checks, single-instance protection, and clear occupied-port
   diagnostics.
+- Added SQLite-backed historical filtering with five management presets, custom
+  From/To timestamps, matching-record counts, and a live-view reset.
+- CSV and XLSX downloads now export the selected period. XLSX keeps only the
+  Readings, Charts, and hidden Chart Data worksheets.
+- Added a discreet support link and kept technical diagnostics out of the normal
+  dashboard.
+- Advanced the development version to `0.3.0.dev0`.
 
 ## 0.1.0-pilot-success — 2026-08-24
 
