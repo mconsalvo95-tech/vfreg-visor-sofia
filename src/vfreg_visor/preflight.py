@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import ConfigError, default_config_path, load_config
+from .storage import verify_sqlite_integrity
 
 
 def result(name: str, status: str, detail: str, **data: Any) -> dict[str, Any]:
@@ -36,10 +37,35 @@ def check_storage(config_path: Path, cfg: dict[str, Any]) -> list[dict[str, Any]
             with tempfile.NamedTemporaryFile(dir=parent, prefix=".vfreg-preflight-", delete=True):
                 pass
             free = shutil.disk_usage(parent).free
-            status = "PASS" if free >= 1_000_000_000 else "WARN"
+            warning_free = int(cfg.get("storage", {}).get("warning_free_bytes", 1_000_000_000))
+            status = "PASS" if free >= warning_free else "WARN"
             checks.append(result("writable_storage", status, f"{parent} ({free / 1_000_000_000:.1f} GB free)", path=str(parent), free_bytes=free))
         except OSError as error:
             checks.append(result("writable_storage", "FAIL", f"{parent}: {error}", path=str(parent)))
+    sqlite_path = destinations["output_sqlite"]
+    if sqlite_path.exists():
+        valid, detail = verify_sqlite_integrity(sqlite_path)
+        checks.append(
+            result(
+                "sqlite_integrity",
+                "PASS" if valid else "FAIL",
+                detail,
+                path=str(sqlite_path),
+            )
+        )
+    storage = cfg.get("storage", {})
+    checks.append(
+        result(
+            "retention_policy",
+            "PASS",
+            (
+                f"measurements={int(storage.get('measurement_retention_days', 90))} days; "
+                f"events={int(storage.get('event_retention_days', 180))} days; "
+                f"backups={int(storage.get('backup_keep', 7))}; "
+                f"budget={int(storage.get('max_runtime_bytes', 3_000_000_000))} bytes"
+            ),
+        )
+    )
     return checks
 
 
@@ -87,8 +113,8 @@ def run_preflight(config_path: str | Path) -> dict[str, Any]:
             quantity = int(modbus["quantity"])
             if not 1 <= tcp_port <= 65535:
                 raise ValueError("TCP port must be between 1 and 65535")
-            if not 1 <= unit_id <= 247 or function_code not in (3, 4):
-                raise ValueError("invalid Modbus unit or read function")
+            if not 1 <= unit_id <= 247 or function_code != 4:
+                raise ValueError("invalid Modbus unit or production function (must be 04)")
             if not 0 <= start_register <= 65535 or not 1 <= quantity <= 125:
                 raise ValueError("invalid Modbus register range")
             checks.append(result("modbus_target", "PASS", f"{target}:{tcp_port}, unit {unit_id}, function {function_code}, registers {start_register}-{start_register + quantity - 1}"))

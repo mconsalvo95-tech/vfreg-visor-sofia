@@ -110,6 +110,20 @@ def parse_payload(
 
     present = sum(value is not None for value in values.values())
     status = "OK" if present == 3 else "PARTIAL" if present else "RAW_ONLY"
+    alarm_status = alarm_for(values, cfg, line_status)
+    if status == "RAW_ONLY":
+        quality_flag, quality_details = "INVALID", "No measurement values decoded"
+    elif status == "PARTIAL":
+        quality_flag, quality_details = "INCOMPLETE", "One or more values are missing"
+    elif cfg.get("limits", {}).get("confirmed", True) is False:
+        quality_flag, quality_details = (
+            "UNVERIFIED",
+            "Operating limits have not been confirmed",
+        )
+    elif alarm_status == "ALARM":
+        quality_flag, quality_details = "OUT_OF_RANGE", "Value outside configured limits"
+    else:
+        quality_flag, quality_details = "GOOD", ""
     source = f"{protocol}:{source_ip}:{source_port}" if source_ip else protocol
     factory = cfg.get("factory", {})
     return Measurement(
@@ -124,8 +138,10 @@ def parse_payload(
         current_ma=values["current_ma"],
         frequency_hz=values["frequency_hz"],
         line_status=line_status,
-        alarm_status=alarm_for(values, cfg, line_status),
+        alarm_status=alarm_status,
         status=status,
+        quality_flag=quality_flag,
+        quality_details=quality_details,
         payload_size=len(payload),
         payload_sha256=hashlib.sha256(payload).hexdigest(),
         batch_id=str(factory.get("batch_id", "")),

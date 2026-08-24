@@ -7,6 +7,7 @@ import socket
 import struct
 import threading
 import time
+from datetime import datetime
 from typing import Any, Optional
 
 from .storage import Measurement, StorageWriter, now_iso
@@ -48,6 +49,22 @@ def _alarm_for(values: dict[str, float], cfg: dict[str, Any]) -> str:
         if limits and (value < float(limits["min"]) or value > float(limits["max"])):
             return "ALARM"
     return "NORMAL"
+
+
+def _quality_for(values: dict[str, float], cfg: dict[str, Any]) -> tuple[str, str]:
+    limits_cfg = cfg.get("limits", {})
+    if limits_cfg.get("confirmed", True) is False:
+        return "UNVERIFIED", "Operating limits have not been confirmed"
+    outside: list[str] = []
+    for field, value in values.items():
+        limits = limits_cfg.get(field)
+        if limits and (value < float(limits["min"]) or value > float(limits["max"])):
+            outside.append(
+                f"{field}={value:g} outside {float(limits['min']):g}-{float(limits['max']):g}"
+            )
+    if outside:
+        return "OUT_OF_RANGE", "; ".join(outside)
+    return "GOOD", ""
 
 
 def parse_modbus_response(
@@ -102,6 +119,7 @@ def parse_modbus_response(
     host = str(network["tcp_host"])
     port = int(network["tcp_port"])
     factory = cfg.get("factory", {})
+    quality_flag, quality_details = _quality_for(values, cfg)
     return Measurement(
         timestamp=received_at,
         source=f"modbus_tcp:{host}:{port}",
@@ -115,6 +133,8 @@ def parse_modbus_response(
         line_status="RUNNING",
         alarm_status=_alarm_for(values, cfg),
         status="OK",
+        quality_flag=quality_flag,
+        quality_details=quality_details,
         payload_size=len(payload),
         payload_sha256=hashlib.sha256(payload).hexdigest(),
         batch_id=str(factory.get("batch_id", "")),
@@ -153,6 +173,9 @@ class ModbusTcpCollector:
             "disconnects": 0,
             "sequence_gaps": 0,
             "duplicate_sequences": 0,
+            "data_gaps": 0,
+            "gap_started_at": "",
+            "last_gap_seconds": 0.0,
             "last_packet_at": "",
             "last_source": "",
             "tcp_listener": "CLIENT_STARTING",
@@ -267,7 +290,46 @@ class ModbusTcpCollector:
         self._increment("bytes_received", row.payload_size)
         if row.alarm_status == "ALARM":
             self._increment("alarm_packets")
+        with self._lock:
+            gap_started_at = str(self._stats.get("gap_started_at", ""))
+        if gap_started_at:
+            try:
+                gap_seconds = max(
+                    0.0,
+                    (
+                        datetime.fromisoformat(row.timestamp)
+                        - datetime.fromisoformat(gap_started_at)
+                    ).total_seconds(),
+                )
+            except ValueError:
+                gap_seconds = 0.0
+            self.writer.submit_event(
+                "DATA_GAP_ENDED",
+                row.source,
+                (
+                    f"Readings resumed; gap started {gap_started_at}; "
+                    f"duration_seconds={gap_seconds:.3f}"
+                ),
+                "WARN",
+            )
+            with self._lock:
+                self._stats["gap_started_at"] = ""
+                self._stats["last_gap_seconds"] = gap_seconds
         self._update(last_packet_at=row.timestamp, last_source=row.source)
+
+    def _start_data_gap(self, source: str, reason: str) -> None:
+        with self._lock:
+            if self._stats.get("gap_started_at"):
+                return
+            started_at = now_iso()
+            self._stats["gap_started_at"] = started_at
+            self._stats["data_gaps"] += 1
+        self.writer.submit_event(
+            "DATA_GAP_STARTED",
+            source,
+            f"Expected reading was not received at {started_at}: {reason}",
+            "ERROR",
+        )
 
     def _wait_for_next_poll(self) -> bool:
         """Wait using the latest interval; return True when stopping."""
@@ -336,6 +398,7 @@ class ModbusTcpCollector:
             except (OSError, TimeoutError, ValueError, ConnectionError) as error:
                 message = str(error)
                 self._update(tcp_listener="CLIENT_RETRYING", last_error=message)
+                self._start_data_gap(source, message)
                 self.writer.submit_event("MODBUS_CLIENT_ERROR", source, message, "ERROR")
                 if self.stop_event.wait(reconnect_delay):
                     break
