@@ -28,8 +28,9 @@ release.
 - Advanced the development version to `0.4.0.dev0`.
 - The portable executable now opens the dashboard in the Windows default browser
   automatically while keeping its collector console visible.
-- Added configurable measurement and event retention, a runtime storage budget,
-  bounded operational logs, and free-space health thresholds.
+- Added 400-day measurement and event retention, a 12 GB runtime storage budget,
+  bounded operational logs, free-space health thresholds, and a preflight
+  capacity check sized for five-second production polling.
 - Added verified scheduled SQLite backups, offline backup/verification/restore
   commands, and tested recovery of WAL-committed records after abrupt exit.
 - Added explicit Modbus data-gap events and backend quality flags for

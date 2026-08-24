@@ -938,6 +938,12 @@ class StartupSafetyTests(unittest.TestCase):
             with self.assertRaisesRegex(ConfigError, "critical_free_bytes"):
                 load_config(path)
 
+    def test_factory_defaults_preserve_more_than_one_year_at_five_seconds(self) -> None:
+        cfg = self._factory_config()
+        self.assertGreaterEqual(cfg["storage"]["measurement_retention_days"], 365)
+        self.assertGreaterEqual(cfg["storage"]["event_retention_days"], 365)
+        self.assertEqual(cfg["storage"]["max_runtime_bytes"], 12_000_000_000)
+
     def test_second_instance_is_rejected_for_same_deployment(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             first = DeploymentInstanceLock(directory)

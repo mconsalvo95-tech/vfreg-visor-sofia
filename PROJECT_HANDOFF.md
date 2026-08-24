@@ -82,14 +82,14 @@ Wireshark on the factory computer.
 
 - The company-PC pilot succeeded with the real viewer.
 - Phase 2 reproducible environment was merged through PR #1.
-- Phase 5 validation passes 50 automated tests, including HTTP-level filtered
+- Phase 5 validation passes 51 automated tests, including HTTP-level filtered
   readings, CSV, XLSX, and invalid-range cases.
 - Both simulator and factory configurations pass the new schema validation.
 - The reviewed Phase 4 PyInstaller package builds and its executable reports
   `VFREG Visor 0.3.0.dev1` in an offline smoke test. The portable launcher opens
   the local dashboard in the Windows default browser automatically.
-- Phase 5 adds 90-day measurement retention, 180-day event retention, bounded
-  journals and logs, a 3 GB runtime budget, daily verified backups, tested
+- Phase 5 adds 400-day measurement and event retention, bounded journals and
+  logs, a 12 GB runtime budget, daily verified backups, tested
   restore/export behavior, explicit data-gap events, and backend quality flags.
 - SQLite WAL recovery after abrupt exit, corrupt-database startup rejection,
   disk-full visibility, timestamp timezone awareness, and budget pruning are

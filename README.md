@@ -11,7 +11,7 @@ associate a measurement with an individual bird.
 - Queued SQLite storage in WAL mode so network reception is not blocked by disk writes.
 - A raw JSONL packet journal containing the original bytes, source, protocol, and SHA-256.
 - Automatic raw-journal rotation: five 100 MB backups by default.
-- Configurable SQLite/event retention, a three-gigabyte runtime budget, rotating
+- Configurable one-year-plus SQLite/event retention, a 12 GB runtime budget, rotating
   operational logs, and verified daily database backups.
 - Preservation of unknown binary packets as `RAW_ONLY` instead of dropping them.
 - Collector receipt time, device time, source address, batch, shift, and alarm status.

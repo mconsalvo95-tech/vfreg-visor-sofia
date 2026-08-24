@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import ConfigError, default_config_path, load_config
-from .storage import verify_sqlite_integrity
+from .storage import directory_size, verify_sqlite_integrity
 
 
 def result(name: str, status: str, detail: str, **data: Any) -> dict[str, Any]:
@@ -37,7 +37,7 @@ def check_storage(config_path: Path, cfg: dict[str, Any]) -> list[dict[str, Any]
             with tempfile.NamedTemporaryFile(dir=parent, prefix=".vfreg-preflight-", delete=True):
                 pass
             free = shutil.disk_usage(parent).free
-            warning_free = int(cfg.get("storage", {}).get("warning_free_bytes", 1_000_000_000))
+            warning_free = int(cfg.get("storage", {}).get("warning_free_bytes", 5_000_000_000))
             status = "PASS" if free >= warning_free else "WARN"
             checks.append(result("writable_storage", status, f"{parent} ({free / 1_000_000_000:.1f} GB free)", path=str(parent), free_bytes=free))
         except OSError as error:
@@ -54,15 +54,35 @@ def check_storage(config_path: Path, cfg: dict[str, Any]) -> list[dict[str, Any]
             )
         )
     storage = cfg.get("storage", {})
+    runtime_root = destinations["output_sqlite"].parent
+    runtime_bytes = directory_size(runtime_root)
+    free_bytes = shutil.disk_usage(runtime_root).free
+    max_runtime_bytes = int(storage.get("max_runtime_bytes", 12_000_000_000))
+    critical_free_bytes = int(storage.get("critical_free_bytes", 2_000_000_000))
+    available_capacity = runtime_bytes + free_bytes
+    required_capacity = max_runtime_bytes + critical_free_bytes
+    checks.append(
+        result(
+            "storage_capacity",
+            "PASS" if available_capacity >= required_capacity else "WARN",
+            (
+                f"{available_capacity / 1_000_000_000:.1f} GB available to VFREG; "
+                f"{required_capacity / 1_000_000_000:.1f} GB recommended for "
+                "the configured retention budget"
+            ),
+            available_capacity_bytes=available_capacity,
+            required_capacity_bytes=required_capacity,
+        )
+    )
     checks.append(
         result(
             "retention_policy",
             "PASS",
             (
-                f"measurements={int(storage.get('measurement_retention_days', 90))} days; "
-                f"events={int(storage.get('event_retention_days', 180))} days; "
+                f"measurements={int(storage.get('measurement_retention_days', 400))} days; "
+                f"events={int(storage.get('event_retention_days', 400))} days; "
                 f"backups={int(storage.get('backup_keep', 7))}; "
-                f"budget={int(storage.get('max_runtime_bytes', 3_000_000_000))} bytes"
+                f"budget={int(storage.get('max_runtime_bytes', 12_000_000_000))} bytes"
             ),
         )
     )

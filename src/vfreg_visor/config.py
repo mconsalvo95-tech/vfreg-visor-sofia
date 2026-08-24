@@ -77,13 +77,13 @@ def validate_config(cfg: dict[str, Any]) -> None:
     )
     _integer(storage.get("raw_journal_backups", 5), "storage.raw_journal_backups", 0, 1000)
     _integer(
-        storage.get("measurement_retention_days", 90),
+        storage.get("measurement_retention_days", 400),
         "storage.measurement_retention_days",
         1,
         3650,
     )
     _integer(
-        storage.get("event_retention_days", 180),
+        storage.get("event_retention_days", 400),
         "storage.event_retention_days",
         1,
         3650,
@@ -95,19 +95,19 @@ def validate_config(cfg: dict[str, Any]) -> None:
         86400,
     )
     _integer(
-        storage.get("max_runtime_bytes", 3_000_000_000),
+        storage.get("max_runtime_bytes", 12_000_000_000),
         "storage.max_runtime_bytes",
         10_000_000,
         100_000_000_000,
     )
     warning_free_bytes = _integer(
-        storage.get("warning_free_bytes", 1_000_000_000),
+        storage.get("warning_free_bytes", 5_000_000_000),
         "storage.warning_free_bytes",
         0,
         100_000_000_000,
     )
     critical_free_bytes = _integer(
-        storage.get("critical_free_bytes", 250_000_000),
+        storage.get("critical_free_bytes", 2_000_000_000),
         "storage.critical_free_bytes",
         0,
         100_000_000_000,

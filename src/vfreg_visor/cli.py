@@ -94,18 +94,18 @@ def run(
                 ),
                 raw_journal_backups=int(storage_cfg.get("raw_journal_backups", 5)),
                 measurement_retention_days=int(
-                    storage_cfg.get("measurement_retention_days", 90)
+                    storage_cfg.get("measurement_retention_days", 400)
                 ),
-                event_retention_days=int(storage_cfg.get("event_retention_days", 180)),
+                event_retention_days=int(storage_cfg.get("event_retention_days", 400)),
                 maintenance_interval_seconds=int(
                     storage_cfg.get("maintenance_interval_seconds", 3600)
                 ),
-                max_runtime_bytes=int(storage_cfg.get("max_runtime_bytes", 3_000_000_000)),
+                max_runtime_bytes=int(storage_cfg.get("max_runtime_bytes", 12_000_000_000)),
                 warning_free_bytes=int(
-                    storage_cfg.get("warning_free_bytes", 1_000_000_000)
+                    storage_cfg.get("warning_free_bytes", 5_000_000_000)
                 ),
                 critical_free_bytes=int(
-                    storage_cfg.get("critical_free_bytes", 250_000_000)
+                    storage_cfg.get("critical_free_bytes", 2_000_000_000)
                 ),
                 backup_directory=str(storage_cfg["backup_directory"]),
                 backup_interval_hours=float(storage_cfg.get("backup_interval_hours", 24)),
