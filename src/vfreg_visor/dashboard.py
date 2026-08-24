@@ -42,6 +42,31 @@ def connection_state(latest: dict | None, timeout_seconds: float) -> str:
     return "CONNECTED" if age <= timeout_seconds else "DISCONNECTED"
 
 
+def parse_time_range(query: dict[str, list[str]]) -> tuple[str | None, str | None]:
+    """Validate browser date/time filters and normalize them to local ISO time."""
+
+    def parse_bound(name: str, *, end: bool) -> datetime | None:
+        raw = query.get(name, [""])[0].strip()
+        if not raw:
+            return None
+        try:
+            value = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError as error:
+            raise ValueError(f"Invalid {name} date/time") from error
+        value = value.astimezone()
+        value = value.replace(microsecond=999999 if end else 0)
+        return value
+
+    start_value = parse_bound("from", end=False)
+    end_value = parse_bound("to", end=True)
+    if start_value and end_value and start_value > end_value:
+        raise ValueError("From date/time must be before To date/time")
+    return (
+        start_value.isoformat(timespec="microseconds") if start_value else None,
+        end_value.isoformat(timespec="microseconds") if end_value else None,
+    )
+
+
 class DashboardServer(ThreadingHTTPServer):
     cfg: dict
     config_path: str
@@ -167,7 +192,23 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 limit = int(query.get("limit", ["180"])[0])
             except ValueError:
                 limit = 180
-            self.send_json(fetch_recent(cfg["output_sqlite"], limit))
+            try:
+                start_time, end_time = parse_time_range(query)
+            except ValueError as error:
+                self.send_error_json(HTTPStatus.BAD_REQUEST, str(error))
+                return
+            self.send_json(
+                {
+                    "readings": fetch_recent(
+                        cfg["output_sqlite"], limit, start_time, end_time
+                    ),
+                    "count": fetch_summary(
+                        cfg["output_sqlite"], start_time, end_time
+                    )["count"],
+                    "from": start_time,
+                    "to": end_time,
+                }
+            )
             return
 
         if parsed.path == "/api/events":
@@ -175,11 +216,28 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/api/export.csv":
-            path = Path(export_csv(cfg["output_sqlite"], cfg["output_csv"]))
+            try:
+                start_time, end_time = parse_time_range(parse_qs(parsed.query))
+            except ValueError as error:
+                self.send_error_json(HTTPStatus.BAD_REQUEST, str(error))
+                return
+            path = Path(
+                export_csv(
+                    cfg["output_sqlite"],
+                    cfg["output_csv"],
+                    start_time,
+                    end_time,
+                )
+            )
             self.send_bytes(path.read_bytes(), "text/csv; charset=utf-8", "vfreg-readings.csv")
             return
 
         if parsed.path == "/api/export.xlsx":
+            try:
+                start_time, end_time = parse_time_range(parse_qs(parsed.query))
+            except ValueError as error:
+                self.send_error_json(HTTPStatus.BAD_REQUEST, str(error))
+                return
             try:
                 from .exports import build_xlsx
             except ModuleNotFoundError:
@@ -195,7 +253,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 )
                 return
             try:
-                path = Path(build_xlsx(cfg))
+                path = Path(build_xlsx(cfg, start_time=start_time, end_time=end_time))
             except Exception as error:
                 self.send_error_json(
                     HTTPStatus.INTERNAL_SERVER_ERROR,

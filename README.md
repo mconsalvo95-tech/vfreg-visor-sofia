@@ -15,10 +15,14 @@ associate a measurement with an individual bird.
 - Collector receipt time, device time, source address, batch, shift, and alarm status.
 - Simplified live dashboard showing time, Volts, mAmp, frequency, connection
   status, recent readings, and a live three-lane trend chart.
+- SQLite-backed history search with 5-, 15-, 30-, and 60-minute presets, today,
+  or a custom From/To period. Clearing the filter returns immediately to live
+  readings without pausing collection.
 - Management CSV and XLSX exports containing only Time, Volts, mAmp, Frec, and
-  Status, with no 5,000-record cap. XLSX includes a separate Charts worksheet
-  for voltage, current, and frequency. Full technical evidence stays in the
-  SQLite database and raw JSONL journal.
+  Status, with no 5,000-record export cap. Active history filters also apply to
+  both downloads. XLSX contains Readings, a separate Charts worksheet, and
+  hidden sampled chart data; it does not add a summary sheet. Full technical
+  evidence stays in the SQLite database and raw JSONL journal.
 - In-place migration of databases created by the earlier prototype.
 
 Port `5000` and the simulated JSON message format remain test assumptions only
@@ -55,7 +59,7 @@ internet connection.
 
 Application code is organized under `src/vfreg_visor/`. The supported source
 entry point is `vfreg-visor`; configuration, dashboard/API, device communication,
-storage, and exports are separate modules. Version `0.2.0.dev0` is reported by
+storage, and exports are separate modules. Version `0.3.0.dev0` is reported by
 the command line, backend status API, and dashboard footer.
 
 Startup validates the configuration before contacting the device. It enforces

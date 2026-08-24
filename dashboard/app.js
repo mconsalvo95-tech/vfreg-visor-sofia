@@ -12,20 +12,31 @@ const elements = {
   statusDetail: document.querySelector("#status-detail"),
   recordsBody: document.querySelector("#records-body"),
   recordCount: document.querySelector("#record-count"),
+  recordCountLabel: document.querySelector("#record-count-label"),
+  historyMode: document.querySelector("#history-mode"),
   networkEndpoint: document.querySelector("#network-endpoint"),
   appVersion: document.querySelector("#app-version"),
   emptyChart: document.querySelector("#empty-chart"),
   canvas: document.querySelector("#history-chart"),
+  csvExport: document.querySelector("#csv-export"),
   xlsxExport: document.querySelector("#xlsx-export"),
   exportStatus: document.querySelector("#export-status"),
   samplingForm: document.querySelector("#sampling-form"),
   pollInterval: document.querySelector("#poll-interval"),
   samplingSave: document.querySelector("#sampling-save"),
   samplingResult: document.querySelector("#sampling-result"),
-  dailyReadingEstimate: document.querySelector("#daily-reading-estimate")
+  dailyReadingEstimate: document.querySelector("#daily-reading-estimate"),
+  historyFilterForm: document.querySelector("#history-filter-form"),
+  historyFrom: document.querySelector("#history-from"),
+  historyTo: document.querySelector("#history-to"),
+  historyFilterClear: document.querySelector("#history-filter-clear"),
+  historyFilterResult: document.querySelector("#history-filter-result"),
+  todayFilter: document.querySelector("#today-filter")
 };
 
 let currentReadings = [];
+let latestStatusData = null;
+let activeRange = null;
 
 function number(value, digits = 1) {
   return value === null || value === undefined || value === ""
@@ -69,7 +80,7 @@ function renderReadings(readings) {
     const cell = document.createElement("td");
     cell.colSpan = 5;
     cell.className = "empty-row";
-    cell.textContent = "Waiting for readings";
+    cell.textContent = activeRange ? "No readings in this period" : "Waiting for readings";
     row.appendChild(cell);
     elements.recordsBody.appendChild(row);
     return;
@@ -97,6 +108,15 @@ function renderReadings(readings) {
   });
 }
 
+function renderHistory(readings, count, modeLabel) {
+  currentReadings = readings || [];
+  elements.recordCount.textContent = Number(count || 0).toLocaleString();
+  elements.recordCountLabel.textContent = activeRange ? "matching readings" : "stored readings";
+  elements.historyMode.textContent = modeLabel;
+  renderReadings(currentReadings);
+  drawChart(currentReadings);
+}
+
 function renderStatus(data) {
   const state = data.connection_state || "WAITING";
   const stateLabel = displayState(state);
@@ -111,7 +131,6 @@ function renderStatus(data) {
   elements.statusDetail.textContent = state === "CONNECTED"
     ? "Receiving live readings"
     : "No recent VFREG response";
-  elements.recordCount.textContent = data.summary.count || 0;
   elements.networkEndpoint.textContent = data.network.mode === "modbus_tcp_client"
     ? `Modbus endpoint: ${data.network.tcp_host}:${data.network.tcp_port}`
     : `Listener port: ${data.network.tcp_port}`;
@@ -130,9 +149,9 @@ function renderStatus(data) {
     elements.frequency.textContent = number(latest.frequency_hz, 1);
   }
 
-  currentReadings = data.readings || [];
-  renderReadings(currentReadings);
-  drawChart(currentReadings);
+  if (!activeRange) {
+    renderHistory(data.readings || [], data.summary.count || 0, "Live view");
+  }
 }
 
 function drawChart(readings) {
@@ -199,13 +218,114 @@ async function refresh() {
   try {
     const response = await fetch("/api/status", { cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    renderStatus(await response.json());
+    latestStatusData = await response.json();
+    renderStatus(latestStatusData);
   } catch (error) {
     elements.connection.dataset.state = "DISCONNECTED";
     elements.connectionLabel.textContent = "Disconnected";
     elements.statusValue.textContent = "Disconnected";
     elements.statusDetail.textContent = `Dashboard error: ${error.message}`;
   }
+}
+
+function localInputValue(date) {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 19);
+}
+
+function filterQuery() {
+  if (!activeRange) return "";
+  const query = new URLSearchParams();
+  if (activeRange.from) query.set("from", activeRange.from);
+  if (activeRange.to) query.set("to", activeRange.to);
+  return `?${query.toString()}`;
+}
+
+function updateExportLinks() {
+  const query = filterQuery();
+  elements.csvExport.href = `/api/export.csv${query}`;
+  elements.xlsxExport.href = `/api/export.xlsx${query}`;
+}
+
+function selectPresetButton(selected) {
+  document.querySelectorAll(".preset-filters button").forEach((button) => {
+    button.dataset.active = String(button === selected);
+  });
+}
+
+async function applyHistoryRange(from, to, label) {
+  if (from && to && new Date(from) > new Date(to)) {
+    elements.historyFilterResult.dataset.error = "true";
+    elements.historyFilterResult.textContent = "From must be before To";
+    return;
+  }
+  activeRange = { from, to, label };
+  updateExportLinks();
+  elements.historyFilterResult.dataset.error = "false";
+  elements.historyFilterResult.textContent = "Loading history...";
+  const query = new URLSearchParams({ limit: "5000" });
+  if (from) query.set("from", from);
+  if (to) query.set("to", to);
+  try {
+    const response = await fetch(`/api/readings?${query.toString()}`, { cache: "no-store" });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+    renderHistory(result.readings || [], result.count || 0, label || "Filtered view");
+    const hiddenCount = Math.max(0, Number(result.count || 0) - (result.readings || []).length);
+    elements.historyFilterResult.textContent = hiddenCount
+      ? `${Number(result.count).toLocaleString()} matches; chart shows the latest 5,000`
+      : `${Number(result.count || 0).toLocaleString()} matching readings`;
+  } catch (error) {
+    activeRange = null;
+    selectPresetButton(null);
+    updateExportLinks();
+    elements.historyFilterResult.dataset.error = "true";
+    elements.historyFilterResult.textContent = error.message;
+    if (latestStatusData) renderStatus(latestStatusData);
+  }
+}
+
+function applyPreset(minutes, button) {
+  const to = new Date();
+  const from = new Date(to.getTime() - minutes * 60000);
+  elements.historyFrom.value = localInputValue(from);
+  elements.historyTo.value = localInputValue(to);
+  selectPresetButton(button);
+  const label = minutes === 60 ? "Last hour" : `Last ${minutes} minutes`;
+  applyHistoryRange(elements.historyFrom.value, elements.historyTo.value, label);
+}
+
+function applyToday() {
+  const to = new Date();
+  const from = new Date(to);
+  from.setHours(0, 0, 0, 0);
+  elements.historyFrom.value = localInputValue(from);
+  elements.historyTo.value = localInputValue(to);
+  selectPresetButton(elements.todayFilter);
+  applyHistoryRange(elements.historyFrom.value, elements.historyTo.value, "Today");
+}
+
+function submitHistoryFilter(event) {
+  event.preventDefault();
+  selectPresetButton(null);
+  const from = elements.historyFrom.value;
+  const to = elements.historyTo.value;
+  if (!from && !to) {
+    clearHistoryFilter();
+    return;
+  }
+  applyHistoryRange(from, to, "Custom period");
+}
+
+function clearHistoryFilter() {
+  activeRange = null;
+  elements.historyFrom.value = "";
+  elements.historyTo.value = "";
+  elements.historyFilterResult.dataset.error = "false";
+  elements.historyFilterResult.textContent = "Showing live readings";
+  selectPresetButton(null);
+  updateExportLinks();
+  if (latestStatusData) renderStatus(latestStatusData);
 }
 
 async function downloadXlsx(event) {
@@ -216,7 +336,7 @@ async function downloadXlsx(event) {
   elements.exportStatus.dataset.error = "false";
   elements.exportStatus.textContent = "Preparing Excel file...";
   try {
-    const response = await fetch("/api/export.xlsx", { cache: "no-store" });
+    const response = await fetch(elements.xlsxExport.href, { cache: "no-store" });
     if (!response.ok) {
       const result = await response.json().catch(() => ({}));
       throw new Error(result.error || `Excel export failed (HTTP ${response.status})`);
@@ -266,8 +386,15 @@ async function savePollingInterval(event) {
 }
 
 refresh();
+updateExportLinks();
 window.setInterval(refresh, 1000);
 window.addEventListener("resize", () => drawChart(currentReadings));
 elements.xlsxExport.addEventListener("click", downloadXlsx);
 elements.pollInterval.addEventListener("change", () => updateSamplingEstimate(elements.pollInterval.value));
 elements.samplingForm.addEventListener("submit", savePollingInterval);
+elements.historyFilterForm.addEventListener("submit", submitHistoryFilter);
+elements.historyFilterClear.addEventListener("click", clearHistoryFilter);
+elements.todayFilter.addEventListener("click", applyToday);
+document.querySelectorAll(".preset-filters button[data-minutes]").forEach((button) => {
+  button.addEventListener("click", () => applyPreset(Number(button.dataset.minutes), button));
+});

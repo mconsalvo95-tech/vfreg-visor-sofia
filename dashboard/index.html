@@ -17,8 +17,8 @@
         <span class="status-dot" aria-hidden="true"></span>
         <span id="connection-label">Waiting</span>
       </div>
-      <a class="button" href="/api/export.csv" download>CSV</a>
-      <a class="button button-primary" id="xlsx-export" href="/api/export.xlsx" download title="Excel workbook with separate management charts">XLSX + Charts</a>
+      <a class="button" id="csv-export" href="/api/export.csv" download title="Export the currently selected time period">CSV</a>
+      <a class="button button-primary" id="xlsx-export" href="/api/export.xlsx" download title="Export the selected period with separate management charts">XLSX + Charts</a>
       <span class="export-status" id="export-status" role="status"></span>
     </div>
   </header>
@@ -98,8 +98,30 @@
           <h2>Recent readings</h2>
         </div>
         <div class="record-summary">
-          <span><strong id="record-count">0</strong> stored readings</span>
+          <span id="history-mode">Live view</span>
+          <span><strong id="record-count">0</strong> <span id="record-count-label">stored readings</span></span>
         </div>
+      </div>
+      <div class="history-filter">
+        <div class="preset-filters" aria-label="Quick history filters">
+          <span>Show</span>
+          <button type="button" data-minutes="5">Last 5 min</button>
+          <button type="button" data-minutes="15">15 min</button>
+          <button type="button" data-minutes="30">30 min</button>
+          <button type="button" data-minutes="60">1 hour</button>
+          <button type="button" id="today-filter">Today</button>
+        </div>
+        <form class="custom-filter" id="history-filter-form">
+          <label for="history-from">From
+            <input id="history-from" type="datetime-local" step="1">
+          </label>
+          <label for="history-to">To
+            <input id="history-to" type="datetime-local" step="1">
+          </label>
+          <button class="filter-apply" type="submit">Apply</button>
+          <button class="filter-clear" id="history-filter-clear" type="button">Clear</button>
+          <span class="filter-result" id="history-filter-result" role="status"></span>
+        </form>
       </div>
       <div class="table-wrap">
         <table>
@@ -123,7 +145,7 @@
   <footer>
     <span id="device-name">VFREG</span>
     <span id="network-endpoint">Network endpoint: loading...</span>
-    <span id="app-version">Version loading...</span>
+    <span><span id="app-version">Version loading...</span> · <a href="https://github.com/mconsalvo95-tech/vfreg-visor-sofia" target="_blank" rel="noreferrer">Support</a></span>
   </footer>
   <script src="/app.js"></script>
 </body>
