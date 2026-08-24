@@ -8,6 +8,11 @@ release.
 ## Unreleased
 
 - Production-readiness work begins from the successful company-PC pilot.
+- Added a Python 3.13 `uv` environment with a committed dependency lockfile.
+- Separated the OpenPyXL runtime dependency from the PyInstaller development
+  and portable-build dependency.
+- Standardized setup, test, preflight, collector, and portable-build commands
+  on the locked environment.
 
 ## 0.1.0-pilot-success — 2026-08-24
 
