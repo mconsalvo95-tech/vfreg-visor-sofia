@@ -1,7 +1,7 @@
 # VFREG Visor — Production Readiness Roadmap
 
 Last updated: 2026-08-24  
-Current status: Phase 3 complete; successful factory pilot preserved
+Current status: Phase 5 complete; successful factory pilot preserved
 Target milestone: `v1.0.0`
 
 ## Purpose
@@ -164,24 +164,44 @@ Goal: Make the application useful without exposing unnecessary backend detail.
 
 Goal: Protect measurements during continuous operation.
 
-- [ ] Define how long raw packets, SQLite history, CSV, and XLSX files must be
+- [x] Define how long raw packets, SQLite history, CSV, and XLSX files must be
   retained.
-- [ ] Add automatic raw-journal and application-log rotation.
-- [ ] Define a maximum storage budget.
-- [ ] Warn before disk space becomes critical.
-- [ ] Handle disk-full and read-only-folder errors without crashing silently.
-- [ ] Record connection gaps and missing readings explicitly.
-- [ ] Record invalid or out-of-range values with a quality flag.
-- [ ] Verify timestamp timezone and Windows clock behavior.
-- [ ] Define an automated database-backup schedule.
-- [ ] Document and test database restoration.
-- [ ] Verify SQLite recovery after an unexpected shutdown.
+- [x] Add automatic raw-journal and application-log rotation.
+- [x] Define a maximum storage budget.
+- [x] Warn before disk space becomes critical.
+- [x] Handle disk-full and read-only-folder errors without crashing silently.
+- [x] Record connection gaps and missing readings explicitly.
+- [x] Record invalid or out-of-range values with a quality flag.
+- [x] Verify timestamp timezone and Windows clock behavior.
+- [x] Define an automated database-backup schedule.
+- [x] Document and test database restoration.
+- [x] Verify SQLite recovery after an unexpected shutdown.
 
 ### Acceptance criteria
 
 - The application cannot fill the disk indefinitely.
 - Missing data is distinguishable from a real zero measurement.
 - A backup can be restored and exported successfully.
+
+---
+
+## UI/UX refinement checkpoint — after Phase 5, before Phase 6
+
+Goal: Improve the management and operator experience now that the operational
+states and data-integrity signals are stable.
+
+- [ ] Review the information hierarchy for managers and normal operators.
+- [ ] Improve chart legibility, spacing, responsive behavior, and visual polish.
+- [ ] Surface connection gaps, data-quality issues, and storage warnings in
+  plain language without exposing routine backend diagnostics.
+- [ ] Design clear empty, loading, disconnected, degraded-storage, and export
+  error states.
+- [ ] Preserve the current history filters, exports, local-only binding, and
+  read-only Modbus behavior.
+- [ ] Test the dashboard at the production PC's screen size and browser zoom.
+
+This checkpoint changes presentation and operator guidance only. It must not
+change the confirmed device protocol or pause collection.
 
 ---
 
@@ -328,7 +348,7 @@ Release `v1.0.0` only when every item below is complete:
 - [x] Read-only Modbus behavior is verified.
 - [x] Historical filtering and filtered exports work.
 - [ ] Reconnection and automatic startup work.
-- [ ] Retention, backup, and recovery are documented and tested.
+- [x] Retention, backup, and recovery are documented and tested.
 - [ ] A multi-day soak test succeeds.
 - [ ] Company IT approves the executable and deployment method.
 - [ ] Operator and support documentation are complete.

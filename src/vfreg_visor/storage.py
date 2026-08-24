@@ -2,14 +2,26 @@ from __future__ import annotations
 
 import csv
 import json
+import logging
 import os
 import queue
+import shutil
 import sqlite3
+import sys
 import threading
+import time
 from contextlib import closing
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any, Optional
+
+
+LOGGER = logging.getLogger("vfreg.storage")
+
+
+class StorageError(RuntimeError):
+    """Raised when the authoritative SQLite history is unusable."""
 
 
 @dataclass
@@ -28,6 +40,8 @@ class Measurement:
     connection_status: str = "CONNECTED"
     alarm_status: str = "NORMAL"
     status: str = "OK"
+    quality_flag: str = "UNVERIFIED"
+    quality_details: str = ""
     payload_size: int = 0
     payload_sha256: str = ""
     batch_id: str = ""
@@ -69,6 +83,8 @@ MEASUREMENT_COLUMNS = {
     "connection_status": "TEXT NOT NULL DEFAULT 'CONNECTED'",
     "alarm_status": "TEXT NOT NULL DEFAULT 'NORMAL'",
     "status": "TEXT NOT NULL DEFAULT 'OK'",
+    "quality_flag": "TEXT NOT NULL DEFAULT 'UNVERIFIED'",
+    "quality_details": "TEXT NOT NULL DEFAULT ''",
     "payload_size": "INTEGER NOT NULL DEFAULT 0",
     "payload_sha256": "TEXT NOT NULL DEFAULT ''",
     "batch_id": "TEXT NOT NULL DEFAULT ''",
@@ -90,14 +106,22 @@ def now_iso() -> str:
 def connect_sqlite(path: str) -> sqlite3.Connection:
     ensure_parent(path)
     connection = sqlite3.connect(path, timeout=10)
-    connection.execute("PRAGMA busy_timeout=10000")
-    connection.execute("PRAGMA journal_mode=WAL")
-    connection.execute("PRAGMA synchronous=NORMAL")
+    try:
+        connection.execute("PRAGMA busy_timeout=10000")
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("PRAGMA synchronous=NORMAL")
+    except sqlite3.Error:
+        connection.close()
+        raise
     return connection
 
 
 def init_sqlite(path: str) -> None:
-    with closing(connect_sqlite(path)) as con:
+    try:
+        con = connect_sqlite(path)
+    except sqlite3.Error as error:
+        raise StorageError(f"SQLite history could not be opened: {path}: {error}") from error
+    with closing(con):
         definitions = ",\n".join(
             ["id INTEGER PRIMARY KEY AUTOINCREMENT"]
             + [f"{name} {definition}" for name, definition in MEASUREMENT_COLUMNS.items()]
@@ -141,6 +165,147 @@ def init_sqlite(path: str) -> None:
         )
         con.execute("PRAGMA optimize")
         con.commit()
+
+
+def verify_sqlite_integrity(path: str | Path) -> tuple[bool, str]:
+    """Run SQLite's quick integrity check without modifying the database."""
+    database = Path(path).resolve()
+    if not database.is_file():
+        return False, f"Database file does not exist: {database}"
+    try:
+        with closing(
+            sqlite3.connect(database.as_uri() + "?mode=ro", timeout=10, uri=True)
+        ) as con:
+            result = str(con.execute("PRAGMA quick_check").fetchone()[0])
+    except sqlite3.Error as error:
+        return False, str(error)
+    return result.lower() == "ok", result
+
+
+def restore_sqlite_backup(backup_path: str | Path, destination: str | Path) -> str:
+    """Restore a verified SQLite backup using an atomic destination replacement."""
+    source = Path(backup_path).resolve()
+    target = Path(destination).resolve()
+    valid, detail = verify_sqlite_integrity(source)
+    if not valid:
+        raise StorageError(f"Backup failed SQLite integrity verification: {source}: {detail}")
+    ensure_parent(str(target))
+    temporary = target.with_suffix(target.suffix + ".restore.tmp")
+    temporary.unlink(missing_ok=True)
+    try:
+        with closing(sqlite3.connect(str(source), timeout=10)) as source_con:
+            with closing(sqlite3.connect(str(temporary), timeout=10)) as target_con:
+                source_con.backup(target_con)
+        restored, restored_detail = verify_sqlite_integrity(temporary)
+        if not restored:
+            raise StorageError(
+                f"Restored database failed integrity verification: {restored_detail}"
+            )
+        os.replace(temporary, target)
+        Path(str(target) + "-wal").unlink(missing_ok=True)
+        Path(str(target) + "-shm").unlink(missing_ok=True)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return str(target)
+
+
+def directory_size(path: str | Path) -> int:
+    root = Path(path)
+    if not root.exists():
+        return 0
+    total = 0
+    for entry in root.rglob("*"):
+        try:
+            if entry.is_file():
+                total += entry.stat().st_size
+        except OSError:
+            continue
+    return total
+
+
+def create_sqlite_backup(
+    source_path: str | Path,
+    backup_directory: str | Path,
+    *,
+    keep: int = 7,
+    created_at: datetime | None = None,
+) -> str:
+    """Create and verify a SQLite online backup, then enforce backup retention."""
+    source = Path(source_path).resolve()
+    init_sqlite(str(source))
+    backup_root = Path(backup_directory).resolve()
+    backup_root.mkdir(parents=True, exist_ok=True)
+    timestamp = (created_at or datetime.now().astimezone()).strftime("%Y%m%d-%H%M%S")
+    destination = backup_root / f"vfreg-{timestamp}.sqlite"
+    suffix = 1
+    while destination.exists():
+        destination = backup_root / f"vfreg-{timestamp}-{suffix}.sqlite"
+        suffix += 1
+    temporary = destination.with_suffix(".sqlite.tmp")
+    temporary.unlink(missing_ok=True)
+    try:
+        with closing(connect_sqlite(str(source))) as source_con:
+            with closing(sqlite3.connect(str(temporary), timeout=10)) as backup_con:
+                source_con.backup(backup_con)
+        valid, detail = verify_sqlite_integrity(temporary)
+        if not valid:
+            raise StorageError(f"New backup failed integrity verification: {detail}")
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+    backups = sorted(
+        backup_root.glob("vfreg-*.sqlite"),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    for expired in backups[max(1, int(keep)) :]:
+        expired.unlink(missing_ok=True)
+    return str(destination)
+
+
+def _delete_expired(
+    con: sqlite3.Connection,
+    measurement_retention_days: int,
+    event_retention_days: int,
+    *,
+    now: datetime | None = None,
+) -> tuple[int, int]:
+    current = now or datetime.now().astimezone()
+    measurement_cutoff = (
+        current - timedelta(days=max(1, int(measurement_retention_days)))
+    ).isoformat()
+    event_cutoff = (
+        current - timedelta(days=max(1, int(event_retention_days)))
+    ).isoformat()
+    measurement_cursor = con.execute(
+        "DELETE FROM measurements WHERE timestamp < ?", (measurement_cutoff,)
+    )
+    event_cursor = con.execute(
+        "DELETE FROM collector_events WHERE timestamp < ?", (event_cutoff,)
+    )
+    return max(0, measurement_cursor.rowcount), max(0, event_cursor.rowcount)
+
+
+def prune_sqlite_history(
+    path: str | Path,
+    measurement_retention_days: int,
+    event_retention_days: int,
+    *,
+    now: datetime | None = None,
+) -> tuple[int, int]:
+    """Delete records older than the configured policy and checkpoint the WAL."""
+    init_sqlite(str(path))
+    with closing(connect_sqlite(str(path))) as con:
+        deleted = _delete_expired(
+            con,
+            measurement_retention_days,
+            event_retention_days,
+            now=now,
+        )
+        con.commit()
+        if any(deleted):
+            con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        return deleted
 
 
 def insert_measurements(con: sqlite3.Connection, rows: list[Measurement]) -> None:
@@ -202,24 +367,65 @@ class StorageWriter:
         batch_size: int = 100,
         raw_journal_max_bytes: int = 104857600,
         raw_journal_backups: int = 5,
+        measurement_retention_days: int = 400,
+        event_retention_days: int = 400,
+        maintenance_interval_seconds: int = 3600,
+        max_runtime_bytes: int = 12_000_000_000,
+        warning_free_bytes: int = 5_000_000_000,
+        critical_free_bytes: int = 2_000_000_000,
+        backup_directory: str | None = None,
+        backup_interval_hours: float = 24,
+        backup_keep: int = 7,
     ) -> None:
         self.sqlite_path = sqlite_path
         self.raw_journal_path = raw_journal_path
+        self.runtime_root = str(Path(sqlite_path).resolve().parent)
         self.batch_size = batch_size
         self.raw_journal_max_bytes = max(0, int(raw_journal_max_bytes))
         self.raw_journal_backups = max(0, int(raw_journal_backups))
+        self.measurement_retention_days = max(1, int(measurement_retention_days))
+        self.event_retention_days = max(1, int(event_retention_days))
+        self.maintenance_interval_seconds = max(1, int(maintenance_interval_seconds))
+        self.max_runtime_bytes = max(1, int(max_runtime_bytes))
+        self.warning_free_bytes = max(0, int(warning_free_bytes))
+        self.critical_free_bytes = max(0, int(critical_free_bytes))
+        self.backup_directory = str(
+            Path(backup_directory or Path(self.runtime_root) / "backups").resolve()
+        )
+        self.backup_interval_seconds = max(1.0, float(backup_interval_hours) * 3600)
+        self.backup_keep = max(1, int(backup_keep))
         self._queue: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=queue_size)
         self._stop = threading.Event()
         self._lock = threading.Lock()
+        self._next_maintenance = 0.0
+        self._storage_failure_active = False
         self._stats: dict[str, Any] = {
             "stored_measurements": 0,
             "stored_events": 0,
             "raw_packets": 0,
             "storage_errors": 0,
+            "dropped_measurements": 0,
+            "dropped_events": 0,
+            "dropped_raw_packets": 0,
+            "retention_measurements_deleted": 0,
+            "retention_events_deleted": 0,
+            "budget_measurements_deleted": 0,
+            "budget_files_deleted": 0,
             "last_error": "",
+            "last_maintenance_at": "",
+            "last_backup_at": "",
+            "last_backup_path": "",
+            "storage_health": "STARTING",
         }
         init_sqlite(sqlite_path)
+        valid, detail = verify_sqlite_integrity(sqlite_path)
+        if not valid:
+            raise StorageError(
+                f"SQLite integrity check failed for {sqlite_path}: {detail}. "
+                "Stop the collector and restore the latest verified backup."
+            )
         ensure_parent(raw_journal_path)
+        Path(self.backup_directory).mkdir(parents=True, exist_ok=True)
         self._thread = threading.Thread(
             target=self._run,
             daemon=True,
@@ -228,10 +434,10 @@ class StorageWriter:
         self._thread.start()
 
     def submit_measurement(self, row: Measurement) -> None:
-        self._queue.put(("measurement", row), timeout=5)
+        self._enqueue("measurement", row)
 
     def submit_raw(self, envelope: dict[str, Any]) -> None:
-        self._queue.put(("raw", envelope), timeout=5)
+        self._enqueue("raw", envelope)
 
     def submit_event(
         self,
@@ -247,7 +453,21 @@ class StorageWriter:
             "source": source,
             "details": details,
         }
-        self._queue.put(("event", event), timeout=5)
+        self._enqueue("event", event)
+
+    def _enqueue(self, kind: str, item: Any) -> None:
+        try:
+            self._queue.put((kind, item), timeout=5)
+        except queue.Full:
+            label = {
+                "measurement": "dropped_measurements",
+                "event": "dropped_events",
+                "raw": "dropped_raw_packets",
+            }[kind]
+            error = StorageError(f"Storage queue is full; one {kind} record was dropped")
+            with self._lock:
+                self._stats[label] += 1
+            self._record_error(error)
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
@@ -260,17 +480,215 @@ class StorageWriter:
             if os.path.exists(self.raw_journal_path)
             else 0
         )
+        try:
+            result["runtime_bytes"] = directory_size(self.runtime_root)
+            result["free_bytes"] = shutil.disk_usage(self.runtime_root).free
+        except OSError as error:
+            result["runtime_bytes"] = None
+            result["free_bytes"] = None
+            result["last_error"] = str(error)
+        result["max_runtime_bytes"] = self.max_runtime_bytes
         return result
 
     def close(self, timeout: float = 5) -> None:
         self._stop.set()
-        self._queue.put(("stop", None), timeout=timeout)
+        try:
+            self._queue.put(("stop", None), timeout=timeout)
+        except queue.Full:
+            self._record_error(StorageError("Storage queue remained full during shutdown"))
         self._thread.join(timeout=timeout)
+        if self._thread.is_alive():
+            self._record_error(StorageError("Storage writer did not stop within the timeout"))
 
     def _record_error(self, error: Exception) -> None:
         with self._lock:
             self._stats["storage_errors"] += 1
             self._stats["last_error"] = str(error)
+            self._stats["storage_health"] = "CRITICAL"
+        self._storage_failure_active = True
+        message = f"VFREG STORAGE ERROR: {error}"
+        print(message, file=sys.stderr)
+        LOGGER.error("%s", error)
+
+    def _backup_is_due(self) -> bool:
+        backups = sorted(Path(self.backup_directory).glob("vfreg-*.sqlite"))
+        if not backups:
+            return True
+        try:
+            newest = max(path.stat().st_mtime for path in backups)
+        except OSError:
+            return True
+        return time.time() - newest >= self.backup_interval_seconds
+
+    def _create_backup(self, con: sqlite3.Connection) -> Path | None:
+        count = int(con.execute("SELECT COUNT(*) FROM measurements").fetchone()[0])
+        if count == 0 or not self._backup_is_due():
+            return None
+        return Path(
+            create_sqlite_backup(
+                self.sqlite_path,
+                self.backup_directory,
+                keep=self.backup_keep,
+            )
+        )
+
+    def _apply_retention(self, con: sqlite3.Connection) -> tuple[int, int]:
+        return _delete_expired(
+            con,
+            self.measurement_retention_days,
+            self.event_retention_days,
+        )
+
+    def _storage_health(self) -> tuple[str, int, int]:
+        runtime_bytes = directory_size(self.runtime_root)
+        free_bytes = shutil.disk_usage(self.runtime_root).free
+        if self._storage_failure_active:
+            return "CRITICAL", runtime_bytes, free_bytes
+        if free_bytes <= self.critical_free_bytes or runtime_bytes >= self.max_runtime_bytes:
+            return "CRITICAL", runtime_bytes, free_bytes
+        if (
+            free_bytes <= self.warning_free_bytes
+            or runtime_bytes >= int(self.max_runtime_bytes * 0.8)
+        ):
+            return "WARNING", runtime_bytes, free_bytes
+        return "HEALTHY", runtime_bytes, free_bytes
+
+    def _enforce_storage_budget(self, con: sqlite3.Connection) -> tuple[int, int]:
+        """Bound growth by pruning oldest disposable evidence before the hard limit."""
+        target = int(self.max_runtime_bytes * 0.9)
+        runtime_bytes = directory_size(self.runtime_root)
+        if runtime_bytes < target:
+            return 0, 0
+
+        files_deleted = 0
+        backups = sorted(
+            Path(self.backup_directory).glob("vfreg-*.sqlite"),
+            key=lambda path: path.stat().st_mtime,
+        )
+        while runtime_bytes >= target and len(backups) > 1:
+            backups.pop(0).unlink(missing_ok=True)
+            files_deleted += 1
+            runtime_bytes = directory_size(self.runtime_root)
+
+        raw_backups = sorted(
+            Path(self.raw_journal_path).parent.glob(
+                Path(self.raw_journal_path).name + ".*"
+            ),
+            key=lambda path: path.stat().st_mtime,
+        )
+        while runtime_bytes >= target and raw_backups:
+            raw_backups.pop(0).unlink(missing_ok=True)
+            files_deleted += 1
+            runtime_bytes = directory_size(self.runtime_root)
+
+        measurements_deleted = 0
+        if runtime_bytes >= target:
+            page_count = int(con.execute("PRAGMA page_count").fetchone()[0])
+            free_pages = int(con.execute("PRAGMA freelist_count").fetchone()[0])
+            page_size = int(con.execute("PRAGMA page_size").fetchone()[0])
+            reusable_bytes = free_pages * page_size
+            desired_reusable = max(10_000_000, int(page_count * page_size * 0.1))
+            if reusable_bytes < desired_reusable:
+                row_count = int(
+                    con.execute("SELECT COUNT(*) FROM measurements").fetchone()[0]
+                )
+                delete_count = min(max(0, row_count - 100), max(1000, row_count // 10))
+                if delete_count:
+                    cursor = con.execute(
+                        "DELETE FROM measurements WHERE id IN "
+                        "(SELECT id FROM measurements ORDER BY id LIMIT ?)",
+                        (delete_count,),
+                    )
+                    measurements_deleted = max(0, cursor.rowcount)
+                    con.commit()
+                    con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        return measurements_deleted, files_deleted
+
+    def _run_maintenance(self, con: sqlite3.Connection) -> None:
+        now_monotonic = time.monotonic()
+        if now_monotonic < self._next_maintenance:
+            return
+        self._next_maintenance = now_monotonic + self.maintenance_interval_seconds
+        try:
+            measurements_deleted, events_deleted = self._apply_retention(con)
+            con.commit()
+            if measurements_deleted or events_deleted:
+                con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            backup = self._create_backup(con)
+            budget_measurements_deleted, budget_files_deleted = (
+                self._enforce_storage_budget(con)
+            )
+            health, runtime_bytes, free_bytes = self._storage_health()
+            timestamp = now_iso()
+            with self._lock:
+                previous_health = self._stats["storage_health"]
+                self._stats["retention_measurements_deleted"] += measurements_deleted
+                self._stats["retention_events_deleted"] += events_deleted
+                self._stats["budget_measurements_deleted"] += budget_measurements_deleted
+                self._stats["budget_files_deleted"] += budget_files_deleted
+                self._stats["last_maintenance_at"] = timestamp
+                self._stats["storage_health"] = health
+                self._stats["runtime_bytes"] = runtime_bytes
+                self._stats["free_bytes"] = free_bytes
+                if backup is not None:
+                    self._stats["last_backup_at"] = timestamp
+                    self._stats["last_backup_path"] = str(backup)
+            maintenance_events: list[dict[str, str]] = []
+            if backup is not None:
+                maintenance_events.append(
+                    {
+                        "timestamp": timestamp,
+                        "event_type": "DATABASE_BACKUP_CREATED",
+                        "severity": "INFO",
+                        "source": "storage",
+                        "details": str(backup),
+                    }
+                )
+                LOGGER.info("Database backup created: %s", backup)
+            if budget_measurements_deleted or budget_files_deleted:
+                maintenance_events.append(
+                    {
+                        "timestamp": timestamp,
+                        "event_type": "STORAGE_BUDGET_PRUNED",
+                        "severity": "WARN",
+                        "source": "storage",
+                        "details": (
+                            f"oldest_measurements={budget_measurements_deleted}; "
+                            f"expired_evidence_files={budget_files_deleted}; "
+                            f"budget_bytes={self.max_runtime_bytes}"
+                        ),
+                    }
+                )
+                LOGGER.warning(
+                    "Storage budget pruning measurements=%s files=%s",
+                    budget_measurements_deleted,
+                    budget_files_deleted,
+                )
+            if health != previous_health and health in {"WARNING", "CRITICAL"}:
+                maintenance_events.append(
+                    {
+                        "timestamp": timestamp,
+                        "event_type": "STORAGE_HEALTH_CHANGED",
+                        "severity": "ERROR" if health == "CRITICAL" else "WARN",
+                        "source": "storage",
+                        "details": (
+                            f"health={health}; runtime_bytes={runtime_bytes}; "
+                            f"free_bytes={free_bytes}; budget_bytes={self.max_runtime_bytes}"
+                        ),
+                    }
+                )
+                LOGGER.warning(
+                    "Storage health %s runtime_bytes=%s free_bytes=%s budget_bytes=%s",
+                    health,
+                    runtime_bytes,
+                    free_bytes,
+                    self.max_runtime_bytes,
+                )
+            insert_events(con, maintenance_events)
+            con.commit()
+        except (OSError, sqlite3.Error, StorageError) as error:
+            con.rollback()
+            self._record_error(error)
 
     def _rotate_raw_journal(self) -> None:
         if (
@@ -298,6 +716,7 @@ class StorageWriter:
                 try:
                     items.append(self._queue.get(timeout=0.25))
                 except queue.Empty:
+                    self._run_maintenance(con)
                     continue
                 while len(items) < self.batch_size:
                     try:
@@ -308,6 +727,8 @@ class StorageWriter:
                 measurements = [item for kind, item in items if kind == "measurement"]
                 events = [item for kind, item in items if kind == "event"]
                 raw_packets = [item for kind, item in items if kind == "raw"]
+                failure_was_active = self._storage_failure_active
+                raw_succeeded = True
                 try:
                     if raw_packets:
                         self._rotate_raw_journal()
@@ -315,19 +736,43 @@ class StorageWriter:
                             for envelope in raw_packets:
                                 handle.write(json.dumps(envelope, separators=(",", ":")) + "\n")
                             handle.flush()
+                except OSError as error:
+                    raw_succeeded = False
+                    with self._lock:
+                        self._stats["dropped_raw_packets"] += len(raw_packets)
+                    self._record_error(error)
+                try:
                     insert_measurements(con, measurements)
                     insert_events(con, events)
                     con.commit()
+                    if failure_was_active and raw_succeeded:
+                        recovered = {
+                            "timestamp": now_iso(),
+                            "event_type": "STORAGE_RECOVERED",
+                            "severity": "INFO",
+                            "source": "storage",
+                            "details": "Storage writes resumed after an error",
+                        }
+                        insert_events(con, [recovered])
+                        con.commit()
+                        self._storage_failure_active = False
+                        LOGGER.info("Storage writes recovered")
                     with self._lock:
                         self._stats["stored_measurements"] += len(measurements)
                         self._stats["stored_events"] += len(events)
-                        self._stats["raw_packets"] += len(raw_packets)
-                except (OSError, sqlite3.Error) as error:
+                except sqlite3.Error as error:
                     con.rollback()
+                    with self._lock:
+                        self._stats["dropped_measurements"] += len(measurements)
+                        self._stats["dropped_events"] += len(events)
                     self._record_error(error)
                 finally:
+                    if raw_succeeded:
+                        with self._lock:
+                            self._stats["raw_packets"] += len(raw_packets)
                     for _item in items:
                         self._queue.task_done()
+                self._run_maintenance(con)
 
 
 def _measurement_filter(
@@ -380,6 +825,10 @@ def fetch_summary(
                 SUM(CASE WHEN alarm_status = 'ALARM' THEN 1 ELSE 0 END) AS alarm_count,
                 SUM(CASE WHEN status = 'RAW_ONLY' THEN 1 ELSE 0 END) AS raw_only_count,
                 SUM(CASE WHEN status = 'PARTIAL' THEN 1 ELSE 0 END) AS partial_count,
+                SUM(CASE WHEN quality_flag IN ('INVALID', 'INCOMPLETE', 'OUT_OF_RANGE')
+                    THEN 1 ELSE 0 END) AS quality_issue_count,
+                SUM(CASE WHEN quality_flag = 'UNVERIFIED' THEN 1 ELSE 0 END)
+                    AS unverified_count,
                 COUNT(DISTINCT source_ip) AS source_count,
                 MIN(timestamp) AS first_timestamp,
                 MAX(timestamp) AS last_timestamp

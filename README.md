@@ -11,6 +11,8 @@ associate a measurement with an individual bird.
 - Queued SQLite storage in WAL mode so network reception is not blocked by disk writes.
 - A raw JSONL packet journal containing the original bytes, source, protocol, and SHA-256.
 - Automatic raw-journal rotation: five 100 MB backups by default.
+- Configurable one-year-plus SQLite/event retention, a 12 GB runtime budget, rotating
+  operational logs, and verified daily database backups.
 - Preservation of unknown binary packets as `RAW_ONLY` instead of dropping them.
 - Collector receipt time, device time, source address, batch, shift, and alarm status.
 - Simplified live dashboard showing time, Volts, mAmp, frequency, connection
@@ -59,7 +61,7 @@ internet connection.
 
 Application code is organized under `src/vfreg_visor/`. The supported source
 entry point is `vfreg-visor`; configuration, dashboard/API, device communication,
-storage, and exports are separate modules. Version `0.3.0.dev1` is reported by
+storage, and exports are separate modules. Version `0.4.0.dev0` is reported by
 the command line, backend status API, and dashboard footer.
 
 The portable `VFREG-VISOR-SOFIA.exe` opens the dashboard in the Windows default
@@ -171,6 +173,9 @@ the raw journal for decoder development.
 Storage queue size, journal size, and backup count are configured under
 `storage` in `config.json`. The dashboard reports listener health, queue depth,
 decode counts, received bytes, source address, and sequence gaps.
+
+The Phase 5 storage defaults and tested recovery procedure are documented in
+[`docs/DATA_INTEGRITY_AND_RECOVERY.md`](docs/DATA_INTEGRITY_AND_RECOVERY.md).
 
 ## Simulator packet
 

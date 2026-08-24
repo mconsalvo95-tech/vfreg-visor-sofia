@@ -4,6 +4,8 @@ import csv
 import json
 import os
 import socket
+import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -13,10 +15,11 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from importlib.metadata import version as package_version
 from io import BytesIO
 from pathlib import Path
+from unittest.mock import patch
 
 from openpyxl import load_workbook
 
@@ -49,6 +52,7 @@ from vfreg_visor.modbus import (  # noqa: E402
     parse_modbus_response,
 )
 from vfreg_visor.network import parse_payload  # noqa: E402
+from vfreg_visor.operational_log import configure_operational_logging  # noqa: E402
 from vfreg_visor.preflight import run_preflight  # noqa: E402
 from vfreg_visor.simulator import build_packet  # noqa: E402
 from vfreg_visor.storage import (  # noqa: E402
@@ -57,6 +61,7 @@ from vfreg_visor.storage import (  # noqa: E402
     append_csv,
     append_sqlite,
     connect_sqlite,
+    create_sqlite_backup,
     export_csv,
     fetch_recent,
     fetch_summary,
@@ -64,6 +69,10 @@ from vfreg_visor.storage import (  # noqa: E402
     insert_measurements,
     iter_events,
     now_iso,
+    prune_sqlite_history,
+    restore_sqlite_backup,
+    StorageError,
+    verify_sqlite_integrity,
 )
 
 
@@ -125,6 +134,7 @@ class PayloadTests(unittest.TestCase):
         self.assertEqual(row.status, "RAW_ONLY")
         self.assertTrue(row.raw_payload.startswith("base64:"))
         self.assertEqual(row.payload_size, 4)
+        self.assertEqual(row.quality_flag, "INVALID")
 
 
 class ModbusTests(unittest.TestCase):
@@ -165,6 +175,34 @@ class ModbusTests(unittest.TestCase):
         self.assertEqual(row.protocol, "modbus_tcp")
         self.assertEqual(row.batch_id, "B1")
         self.assertEqual(row.alarm_status, "NORMAL")
+        self.assertEqual(row.quality_flag, "UNVERIFIED")
+
+    def test_confirmed_limits_mark_out_of_range_quality(self) -> None:
+        cfg = self.factory_config()
+        cfg["limits"] = {
+            "confirmed": True,
+            "voltage_v": {"min": 40, "max": 50},
+            "current_ma": {"min": 400, "max": 500},
+            "frequency_hz": {"min": 190, "max": 210},
+        }
+        response = bytes.fromhex("000500000009050406002501a900cb")
+        row = parse_modbus_response(response, cfg, expected_transaction_id=5)
+        self.assertEqual(row.quality_flag, "OUT_OF_RANGE")
+        self.assertIn("voltage_v=37", row.quality_details)
+        self.assertEqual(row.alarm_status, "ALARM")
+
+    def test_data_gap_is_recorded_when_readings_resume(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            sqlite_path = os.path.join(directory, "readings.sqlite")
+            writer = StorageWriter(sqlite_path, os.path.join(directory, "raw.jsonl"))
+            collector = ModbusTcpCollector(self.factory_config(), writer)
+            collector._start_data_gap("modbus:test", "test timeout")
+            response = bytes.fromhex("000500000009050406002501a900cb")
+            collector._record(parse_modbus_response(response, self.factory_config()))
+            writer.close()
+            event_types = [event["event_type"] for event in iter_events(sqlite_path)]
+            self.assertIn("DATA_GAP_STARTED", event_types)
+            self.assertIn("DATA_GAP_ENDED", event_types)
 
     def test_modbus_write_function_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
@@ -314,6 +352,7 @@ class StorageTests(unittest.TestCase):
             self.assertIn("device_timestamp", columns)
             self.assertIn("payload_sha256", columns)
             self.assertIn("batch_id", columns)
+            self.assertIn("quality_flag", columns)
 
     def test_storage_writer_persists_raw_packets_and_events(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -330,6 +369,34 @@ class StorageTests(unittest.TestCase):
                 self.assertEqual(len(handle.readlines()), 1)
             events = list(iter_events(sqlite_path))
             self.assertEqual(events[0]["event_type"], "CONNECTED")
+
+    def test_storage_failure_is_visible_and_writer_stops_cleanly(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            writer = StorageWriter(
+                os.path.join(directory, "readings.sqlite"),
+                os.path.join(directory, "raw.jsonl"),
+            )
+            with patch(
+                "vfreg_visor.storage.insert_measurements",
+                side_effect=sqlite3.OperationalError("disk full"),
+            ):
+                writer.submit_measurement(
+                    Measurement(now_iso(), "test", 1, 35, 340, 202)
+                )
+                writer.close()
+            snapshot = writer.snapshot()
+            self.assertGreaterEqual(snapshot["storage_errors"], 1)
+            self.assertEqual(snapshot["dropped_measurements"], 1)
+            self.assertEqual(snapshot["storage_health"], "CRITICAL")
+            self.assertFalse(snapshot["writer_alive"])
+
+    def test_corrupt_database_stops_storage_startup(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            sqlite_path = os.path.join(directory, "corrupt.sqlite")
+            with open(sqlite_path, "wb") as handle:
+                handle.write(b"not a sqlite database")
+            with self.assertRaises(StorageError):
+                StorageWriter(sqlite_path, os.path.join(directory, "raw.jsonl"))
 
     def test_raw_journal_rotates_without_losing_packets(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -351,6 +418,149 @@ class StorageTests(unittest.TestCase):
                 with open(path, "r", encoding="utf-8") as handle:
                     packets.extend(json.loads(line)["packet"] for line in handle)
             self.assertEqual(sorted(packets), [1, 2])
+
+    def test_retention_deletes_old_history_but_keeps_recent_readings(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            sqlite_path = os.path.join(directory, "readings.sqlite")
+            current = datetime(2026, 8, 24, 12, 0, tzinfo=timezone.utc)
+            append_sqlite(
+                sqlite_path,
+                Measurement(
+                    (current - timedelta(days=91)).isoformat(),
+                    "old",
+                    1,
+                    35,
+                    340,
+                    202,
+                ),
+            )
+            append_sqlite(
+                sqlite_path,
+                Measurement(current.isoformat(), "recent", 2, 36, 341, 203),
+            )
+            deleted, _events_deleted = prune_sqlite_history(
+                sqlite_path, 90, 180, now=current
+            )
+            self.assertEqual(deleted, 1)
+            self.assertEqual(
+                [row["source"] for row in fetch_recent(sqlite_path, 10)], ["recent"]
+            )
+
+    def test_verified_backup_can_be_restored_and_exported(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            sqlite_path = os.path.join(directory, "readings.sqlite")
+            backups = os.path.join(directory, "backups")
+            append_sqlite(
+                sqlite_path,
+                Measurement(now_iso(), "before-backup", 1, 35, 340, 202),
+            )
+            backup = create_sqlite_backup(sqlite_path, backups, keep=2)
+            valid, detail = verify_sqlite_integrity(backup)
+            self.assertTrue(valid, detail)
+            append_sqlite(
+                sqlite_path,
+                Measurement(now_iso(), "after-backup", 2, 36, 341, 203),
+            )
+            restored_path = os.path.join(directory, "restored.sqlite")
+            restore_sqlite_backup(backup, restored_path)
+            self.assertEqual(fetch_summary(restored_path)["count"], 1)
+            csv_path = os.path.join(directory, "restored.csv")
+            export_csv(restored_path, csv_path)
+            with open(csv_path, "r", encoding="utf-8") as handle:
+                self.assertEqual(len(handle.readlines()), 2)
+
+    def test_integrity_check_does_not_create_a_missing_database(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            missing = Path(directory) / "missing.sqlite"
+            valid, detail = verify_sqlite_integrity(missing)
+            self.assertFalse(valid)
+            self.assertIn("does not exist", detail)
+            self.assertFalse(missing.exists())
+
+    def test_writer_creates_first_scheduled_backup(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            sqlite_path = os.path.join(directory, "readings.sqlite")
+            backup_directory = os.path.join(directory, "backups")
+            writer = StorageWriter(
+                sqlite_path,
+                os.path.join(directory, "raw.jsonl"),
+                backup_directory=backup_directory,
+                backup_keep=2,
+            )
+            writer.submit_measurement(
+                Measurement(now_iso(), "test", 1, 35, 340, 202)
+            )
+            writer.close()
+            backups = list(Path(backup_directory).glob("vfreg-*.sqlite"))
+            self.assertEqual(len(backups), 1)
+            self.assertTrue(verify_sqlite_integrity(backups[0])[0])
+
+    def test_storage_budget_prunes_oldest_rows_before_unbounded_growth(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            sqlite_path = os.path.join(directory, "readings.sqlite")
+            init_sqlite(sqlite_path)
+            con = connect_sqlite(sqlite_path)
+            insert_measurements(
+                con,
+                [
+                    Measurement(now_iso(), "budget", index, 35, 340, 202)
+                    for index in range(200)
+                ],
+            )
+            con.commit()
+            con.close()
+            writer = StorageWriter(
+                sqlite_path,
+                os.path.join(directory, "raw.jsonl"),
+                max_runtime_bytes=1000,
+                maintenance_interval_seconds=1,
+            )
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline:
+                if writer.snapshot()["budget_measurements_deleted"]:
+                    break
+                time.sleep(0.05)
+            snapshot = writer.snapshot()
+            writer.close()
+            self.assertGreater(snapshot["budget_measurements_deleted"], 0)
+            self.assertLess(fetch_summary(sqlite_path)["count"], 200)
+
+    def test_sqlite_wal_recovers_committed_record_after_abrupt_exit(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            sqlite_path = os.path.join(directory, "unexpected.sqlite")
+            script = (
+                "import os; "
+                "from vfreg_visor.storage import Measurement, append_sqlite, now_iso; "
+                f"append_sqlite({sqlite_path!r}, Measurement(now_iso(), 'abrupt', 1, 35, 340, 202)); "
+                "os._exit(0)"
+            )
+            completed = subprocess.run([sys.executable, "-c", script], check=False)
+            self.assertEqual(completed.returncode, 0)
+            self.assertEqual(fetch_summary(sqlite_path)["count"], 1)
+            self.assertTrue(verify_sqlite_integrity(sqlite_path)[0])
+
+    def test_collector_timestamp_always_contains_timezone(self) -> None:
+        parsed = datetime.fromisoformat(now_iso())
+        self.assertIsNotNone(parsed.utcoffset())
+
+    def test_application_log_rotation_is_bounded(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            log_path = os.path.join(directory, "vfreg.log")
+            logger = configure_operational_logging(
+                {
+                    "storage": {
+                        "application_log": log_path,
+                        "application_log_max_bytes": 1024,
+                        "application_log_backups": 2,
+                    }
+                }
+            )
+            for index in range(200):
+                logger.info("rotation-test-%04d-%s", index, "x" * 80)
+            for handler in list(logger.handlers):
+                handler.close()
+                logger.removeHandler(handler)
+            self.assertLessEqual(len(list(Path(directory).glob("vfreg.log*"))), 3)
 
     def test_csv_export_is_not_limited_to_5000_records(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -591,7 +801,7 @@ class StatusTests(unittest.TestCase):
                     f"http://127.0.0.1:{server.server_port}/api/status", timeout=3
                 ) as response:
                     status = json.load(response)
-                self.assertEqual(status["app_version"], "0.3.0.dev1")
+                self.assertEqual(status["app_version"], "0.4.0.dev0")
                 with urllib.request.urlopen(
                     f"http://127.0.0.1:{server.server_port}/", timeout=3
                 ) as response:
@@ -663,6 +873,14 @@ class PortableConfigTests(unittest.TestCase):
                 loaded["output_xlsx"],
                 os.path.join(directory, "data", "factory", "readings.xlsx"),
             )
+            self.assertEqual(
+                loaded["storage"]["backup_directory"],
+                os.path.join(directory, "data", "factory", "backups"),
+            )
+            self.assertEqual(
+                loaded["storage"]["application_log"],
+                os.path.join(directory, "data", "factory", "vfreg.log"),
+            )
 
 
 class StartupSafetyTests(unittest.TestCase):
@@ -709,6 +927,22 @@ class StartupSafetyTests(unittest.TestCase):
             path.write_text(json.dumps(cfg), encoding="utf-8")
             with self.assertRaisesRegex(ConfigError, "storage.queue_size"):
                 load_config(path)
+
+    def test_invalid_free_space_thresholds_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            cfg = self._factory_config()
+            cfg["storage"]["warning_free_bytes"] = 100
+            cfg["storage"]["critical_free_bytes"] = 200
+            path = Path(directory) / "config.factory.json"
+            path.write_text(json.dumps(cfg), encoding="utf-8")
+            with self.assertRaisesRegex(ConfigError, "critical_free_bytes"):
+                load_config(path)
+
+    def test_factory_defaults_preserve_more_than_one_year_at_five_seconds(self) -> None:
+        cfg = self._factory_config()
+        self.assertGreaterEqual(cfg["storage"]["measurement_retention_days"], 365)
+        self.assertGreaterEqual(cfg["storage"]["event_retention_days"], 365)
+        self.assertEqual(cfg["storage"]["max_runtime_bytes"], 12_000_000_000)
 
     def test_second_instance_is_rejected_for_same_deployment(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

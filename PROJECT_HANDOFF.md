@@ -1,8 +1,8 @@
 # VFREG Visor — Project Handoff
 
 Last updated: 2026-08-24
-Current development version: `0.3.0.dev1`
-Production-readiness status: Phase 4 complete
+Current development version: `0.4.0.dev0`
+Production-readiness status: Phase 5 complete
 
 ## User communication
 
@@ -82,12 +82,18 @@ Wireshark on the factory computer.
 
 - The company-PC pilot succeeded with the real viewer.
 - Phase 2 reproducible environment was merged through PR #1.
-- Phase 4 validation passes 36 automated tests, including HTTP-level filtered
+- Phase 5 validation passes 51 automated tests, including HTTP-level filtered
   readings, CSV, XLSX, and invalid-range cases.
 - Both simulator and factory configurations pass the new schema validation.
-- The Phase 4 PyInstaller package builds and its executable reports
+- The reviewed Phase 4 PyInstaller package builds and its executable reports
   `VFREG Visor 0.3.0.dev1` in an offline smoke test. The portable launcher opens
   the local dashboard in the Windows default browser automatically.
+- Phase 5 adds 400-day measurement and event retention, bounded journals and
+  logs, a 12 GB runtime budget, daily verified backups, tested
+  restore/export behavior, explicit data-gap events, and backend quality flags.
+- SQLite WAL recovery after abrupt exit, corrupt-database startup rejection,
+  disk-full visibility, timestamp timezone awareness, and budget pruning are
+  covered by automated tests.
 - An 18,522-reading XLSX export was validated with all readings preserved and
   2,000 sampled chart points.
 - Existing database schema, relative data paths, exports, and confirmed Modbus
@@ -95,6 +101,6 @@ Wireshark on the factory computer.
 
 ## Next work
 
-Follow `PRODUCTION_READINESS_ROADMAP.md`. The next phase is Phase 5: data
-integrity, retention, storage budgets, and backup/recovery behavior. Keep the
+Follow `PRODUCTION_READINESS_ROADMAP.md`. The next planned work is the UI/UX
+refinement checkpoint, followed by Phase 6 runtime reliability. Keep the
 production Modbus path strictly read-only while that work proceeds.

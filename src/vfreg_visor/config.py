@@ -10,6 +10,7 @@ from typing import Any
 
 ALLOWED_POLL_INTERVALS = (0.5, 1.0, 5.0, 15.0, 30.0, 60.0)
 OUTPUT_KEYS = ("output_csv", "output_sqlite", "output_xlsx", "raw_journal")
+STORAGE_PATH_KEYS = ("backup_directory", "application_log")
 
 
 class ConfigError(ValueError):
@@ -75,6 +76,68 @@ def validate_config(cfg: dict[str, Any]) -> None:
         10_000_000_000,
     )
     _integer(storage.get("raw_journal_backups", 5), "storage.raw_journal_backups", 0, 1000)
+    _integer(
+        storage.get("measurement_retention_days", 400),
+        "storage.measurement_retention_days",
+        1,
+        3650,
+    )
+    _integer(
+        storage.get("event_retention_days", 400),
+        "storage.event_retention_days",
+        1,
+        3650,
+    )
+    _integer(
+        storage.get("maintenance_interval_seconds", 3600),
+        "storage.maintenance_interval_seconds",
+        1,
+        86400,
+    )
+    _integer(
+        storage.get("max_runtime_bytes", 12_000_000_000),
+        "storage.max_runtime_bytes",
+        10_000_000,
+        100_000_000_000,
+    )
+    warning_free_bytes = _integer(
+        storage.get("warning_free_bytes", 5_000_000_000),
+        "storage.warning_free_bytes",
+        0,
+        100_000_000_000,
+    )
+    critical_free_bytes = _integer(
+        storage.get("critical_free_bytes", 2_000_000_000),
+        "storage.critical_free_bytes",
+        0,
+        100_000_000_000,
+    )
+    if critical_free_bytes > warning_free_bytes:
+        raise ConfigError(
+            "storage.critical_free_bytes must not exceed storage.warning_free_bytes"
+        )
+    _number(
+        storage.get("backup_interval_hours", 24),
+        "storage.backup_interval_hours",
+        0,
+    )
+    _integer(storage.get("backup_keep", 7), "storage.backup_keep", 1, 365)
+    _integer(
+        storage.get("application_log_max_bytes", 10_485_760),
+        "storage.application_log_max_bytes",
+        1024,
+        1_000_000_000,
+    )
+    _integer(
+        storage.get("application_log_backups", 5),
+        "storage.application_log_backups",
+        1,
+        100,
+    )
+    for key in STORAGE_PATH_KEYS:
+        value = storage.get(key)
+        if value is not None and (not isinstance(value, str) or not value.strip()):
+            raise ConfigError(f"storage.{key} must be a non-empty path")
 
     limits = cfg.get("limits")
     if not isinstance(limits, dict):
@@ -191,6 +254,17 @@ def load_config(path: str | Path, *, validate: bool = True) -> dict[str, Any]:
         value = Path(str(cfg[key]))
         if not value.is_absolute():
             cfg[key] = str((config_path.parent / value).resolve())
+    storage = cfg.setdefault("storage", {})
+    runtime_parent = Path(str(cfg["output_sqlite"])).resolve().parent
+    storage_defaults = {
+        "backup_directory": runtime_parent / "backups",
+        "application_log": runtime_parent / "vfreg.log",
+    }
+    for key, default in storage_defaults.items():
+        value = Path(str(storage.get(key, default)))
+        if not value.is_absolute():
+            value = (config_path.parent / value).resolve()
+        storage[key] = str(value)
     return cfg
 
 
@@ -207,6 +281,24 @@ def ensure_runtime_paths_writable(cfg: dict[str, Any]) -> None:
                 pass
         except OSError as error:
             raise ConfigError(f"Runtime data directory is not writable: {parent}: {error}") from error
+    storage = cfg.get("storage", {})
+    for key in STORAGE_PATH_KEYS:
+        configured = storage.get(key)
+        if not configured:
+            continue
+        path = Path(str(configured)).resolve()
+        parent = path if key == "backup_directory" else path.parent
+        if parent in checked:
+            continue
+        checked.add(parent)
+        try:
+            parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(prefix=".vfreg-write-test-", dir=parent):
+                pass
+        except OSError as error:
+            raise ConfigError(
+                f"Runtime data directory is not writable: {parent}: {error}"
+            ) from error
 
 
 def _update_config(config_path: str | Path, update: Any) -> None:

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vfreg-factory-collector"
-version = "0.3.0.dev1"
+version = "0.4.0.dev0"
 description = "Local Modbus TCP collector for the VFREG poultry stunning monitor"
 requires-python = ">=3.13,<3.14"
 dependencies = [
@@ -15,6 +15,7 @@ dependencies = [
 vfreg-visor = "vfreg_visor.cli:main"
 vfreg-preflight = "vfreg_visor.preflight:main"
 vfreg-simulator = "vfreg_visor.simulator:main"
+vfreg-maintenance = "vfreg_visor.maintenance:main"
 
 [dependency-groups]
 dev = [

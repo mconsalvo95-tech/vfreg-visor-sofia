@@ -6,6 +6,7 @@ import sys
 import threading
 import webbrowser
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from typing import Sequence
 
@@ -19,7 +20,8 @@ from .config import (
 from .dashboard import DashboardHandler, DashboardServer
 from .instance import DeploymentInstanceLock, InstanceAlreadyRunning
 from .network import start_network_servers
-from .storage import StorageWriter
+from .operational_log import configure_operational_logging
+from .storage import StorageError, StorageWriter
 
 
 class StartupError(RuntimeError):
@@ -71,6 +73,7 @@ def run(
     resolved_config = Path(config_path).resolve()
     cfg = load_config(resolved_config)
     ensure_runtime_paths_writable(cfg)
+    logger = configure_operational_logging(cfg)
     lock = DeploymentInstanceLock(resolved_config.parent)
 
     with lock:
@@ -90,6 +93,23 @@ def run(
                     storage_cfg.get("raw_journal_max_bytes", 104857600)
                 ),
                 raw_journal_backups=int(storage_cfg.get("raw_journal_backups", 5)),
+                measurement_retention_days=int(
+                    storage_cfg.get("measurement_retention_days", 400)
+                ),
+                event_retention_days=int(storage_cfg.get("event_retention_days", 400)),
+                maintenance_interval_seconds=int(
+                    storage_cfg.get("maintenance_interval_seconds", 3600)
+                ),
+                max_runtime_bytes=int(storage_cfg.get("max_runtime_bytes", 12_000_000_000)),
+                warning_free_bytes=int(
+                    storage_cfg.get("warning_free_bytes", 5_000_000_000)
+                ),
+                critical_free_bytes=int(
+                    storage_cfg.get("critical_free_bytes", 2_000_000_000)
+                ),
+                backup_directory=str(storage_cfg["backup_directory"]),
+                backup_interval_hours=float(storage_cfg.get("backup_interval_hours", 24)),
+                backup_keep=int(storage_cfg.get("backup_keep", 7)),
             )
             collector = start_network_servers(cfg, writer)
             server.cfg = cfg
@@ -117,6 +137,14 @@ def run(
                     f"({'confirmed' if cfg['network'].get('port_confirmed') else 'test port, unconfirmed'})"
                 )
             print("Runtime data:", Path(cfg["output_sqlite"]).parent)
+            print("Backups:", storage_cfg["backup_directory"])
+            logger.info(
+                "VFREG Visor %s started config=%s dashboard=%s timezone=%s",
+                __version__,
+                resolved_config,
+                dashboard_url,
+                datetime.now().astimezone().tzinfo,
+            )
             if open_browser:
                 browser_timer = threading.Timer(
                     0.5,
@@ -135,6 +163,7 @@ def run(
             if writer is not None:
                 writer.close()
             server.server_close()
+            logger.info("VFREG Visor stopped")
 
 
 def main(
@@ -145,7 +174,7 @@ def main(
     args = parse_args(argv)
     try:
         run(args.config, open_browser=open_browser)
-    except (ConfigError, InstanceAlreadyRunning, StartupError) as error:
+    except (ConfigError, InstanceAlreadyRunning, StartupError, StorageError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
     except OSError as error:

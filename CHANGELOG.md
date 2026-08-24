@@ -25,9 +25,16 @@ release.
   Readings, Charts, and hidden Chart Data worksheets.
 - Added a discreet support link and kept technical diagnostics out of the normal
   dashboard.
-- Advanced the development version to `0.3.0.dev1`.
+- Advanced the development version to `0.4.0.dev0`.
 - The portable executable now opens the dashboard in the Windows default browser
   automatically while keeping its collector console visible.
+- Added 400-day measurement and event retention, a 12 GB runtime storage budget,
+  bounded operational logs, free-space health thresholds, and a preflight
+  capacity check sized for five-second production polling.
+- Added verified scheduled SQLite backups, offline backup/verification/restore
+  commands, and tested recovery of WAL-committed records after abrupt exit.
+- Added explicit Modbus data-gap events and backend quality flags for
+  unverified, out-of-range, incomplete, and invalid readings.
 
 ## 0.1.0-pilot-success — 2026-08-24
 
