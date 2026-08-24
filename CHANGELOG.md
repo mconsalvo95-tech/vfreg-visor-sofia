@@ -25,7 +25,9 @@ release.
   Readings, Charts, and hidden Chart Data worksheets.
 - Added a discreet support link and kept technical diagnostics out of the normal
   dashboard.
-- Advanced the development version to `0.3.0.dev0`.
+- Advanced the development version to `0.3.0.dev1`.
+- The portable executable now opens the dashboard in the Windows default browser
+  automatically while keeping its collector console visible.
 
 ## 0.1.0-pilot-success — 2026-08-24
 

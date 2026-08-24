@@ -59,8 +59,12 @@ internet connection.
 
 Application code is organized under `src/vfreg_visor/`. The supported source
 entry point is `vfreg-visor`; configuration, dashboard/API, device communication,
-storage, and exports are separate modules. Version `0.3.0.dev0` is reported by
+storage, and exports are separate modules. Version `0.3.0.dev1` is reported by
 the command line, backend status API, and dashboard footer.
+
+The portable `VFREG-VISOR-SOFIA.exe` opens the dashboard in the Windows default
+browser after the local server starts. The console remains visible so operators
+can see startup errors and stop collection safely with `Ctrl+C`.
 
 Startup validates the configuration before contacting the device. It enforces
 local-only dashboard access, production Modbus function `04`, writable runtime

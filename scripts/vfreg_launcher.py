@@ -3,4 +3,4 @@
 from vfreg_visor.cli import main
 
 
-raise SystemExit(main())
+raise SystemExit(main(open_browser=True))
