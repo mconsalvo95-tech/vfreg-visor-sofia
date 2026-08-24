@@ -46,15 +46,15 @@ work. Check an item only after its result has been tested and documented.
 
 Goal: Preserve the exact version that passed the company-PC pilot.
 
-- [ ] Create a private source-code repository.
-- [ ] Choose the repository host: GitHub, GitLab, Azure DevOps, or an internal
+- [x] Create a private source-code repository.
+- [x] Choose the repository host: GitHub, GitLab, Azure DevOps, or an internal
   company server.
 - [x] Confirm that generated factory data is excluded from version control.
 - [x] Confirm that `.pcapng`, SQLite, CSV, XLSX, `.venv`, build, and temporary
   files are ignored.
 - [x] Add a sanitized `config.example.json`.
 - [x] Keep the real deployment configuration outside public history.
-- [ ] Create the first clean commit.
+- [x] Create the first clean commit.
 - [ ] Tag the proven baseline as `v0.1.0-pilot-success`.
 - [ ] Store the matching portable ZIP and its SHA-256 checksum as release
   artifacts.
@@ -352,6 +352,7 @@ Record meaningful production decisions here as they are approved.
 
 | Date | Decision | Reason | Approved by |
 |---|---|---|---|
-| 2026-08-24 | Preserve the successful pilot before further restructuring | Protect the proven device integration | Pending |
-| 2026-08-24 | Keep production Modbus communication read-only | Protect the electrical process and equipment | Pending |
-| 2026-08-24 | Use `uv` for development and PyInstaller for Windows deployment | Reproducible development plus offline operation | Pending |
+| 2026-08-24 | Preserve the successful pilot before further restructuring | Protect the proven device integration | MC95 |
+| 2026-08-24 | Use a private GitHub repository named `vfreg-visor-sofia` | Keep source and releases controlled and recoverable | MC95 |
+| 2026-08-24 | Keep production Modbus communication read-only | Protect the electrical process and equipment | MC95 |
+| 2026-08-24 | Use `uv` for development and PyInstaller for Windows deployment | Reproducible development plus offline operation | MC95 |
