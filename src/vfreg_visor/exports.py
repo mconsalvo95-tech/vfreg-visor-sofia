@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 from datetime import datetime
 
@@ -9,7 +8,8 @@ from openpyxl.chart import LineChart, Reference
 from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-from storage import (
+from .config import default_config_path, load_config
+from .storage import (
     MANAGER_EXPORT_COLUMNS,
     fetch_summary,
     format_manager_timestamp,
@@ -144,8 +144,7 @@ def style_header(sheet) -> None:
 
 
 def main() -> None:
-    with open("config.json", "r", encoding="utf-8") as handle:
-        cfg = json.load(handle)
+    cfg = load_config(default_config_path(), validate=False)
     print("Excel generated:", build_xlsx(cfg))
 
 

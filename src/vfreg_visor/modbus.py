@@ -9,7 +9,7 @@ import threading
 import time
 from typing import Any, Optional
 
-from storage import Measurement, StorageWriter, now_iso
+from .storage import Measurement, StorageWriter, now_iso
 
 
 def build_modbus_request(
@@ -19,8 +19,8 @@ def build_modbus_request(
     start_register: int,
     quantity: int,
 ) -> bytes:
-    if function_code not in (3, 4):
-        raise ValueError("Only read functions 03 and 04 are supported")
+    if function_code != 4:
+        raise ValueError("Production collection permits only function 04 reads")
     if not 1 <= unit_id <= 247:
         raise ValueError("Modbus unit_id must be between 1 and 247")
     if not 0 <= start_register <= 65535:

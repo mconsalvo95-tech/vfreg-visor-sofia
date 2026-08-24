@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 .venv*/
 *.egg-info/
+.vfreg-collector.lock
 .pytest_cache/
 .coverage
 htmlcov/

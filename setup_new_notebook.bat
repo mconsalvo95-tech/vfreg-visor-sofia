@@ -19,7 +19,7 @@ if errorlevel 1 goto :install_failed
 
 echo.
 echo Locked environment installed. Running the factory preflight...
-uv run --locked python preflight.py --config config.factory.json
+uv run --locked vfreg-preflight --config config.factory.json
 if errorlevel 1 goto :preflight_failed
 
 echo.

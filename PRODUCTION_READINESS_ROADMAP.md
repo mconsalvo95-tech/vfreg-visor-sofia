@@ -1,7 +1,7 @@
 # VFREG Visor — Production Readiness Roadmap
 
 Last updated: 2026-08-24  
-Current status: Phase 2 complete; successful factory pilot preserved
+Current status: Phase 3 complete; successful factory pilot preserved
 Target milestone: `v1.0.0`
 
 ## Purpose
@@ -113,18 +113,18 @@ Goal: Make development and builds repeatable on another development computer.
 
 Goal: Improve maintainability without changing the confirmed device protocol.
 
-- [ ] Move Python modules into a clear `src/vfreg_visor/` package.
-- [ ] Separate device communication, storage, exports, HTTP API, and
+- [x] Move Python modules into a clear `src/vfreg_visor/` package.
+- [x] Separate device communication, storage, exports, HTTP API, and
   configuration responsibilities.
-- [ ] Define a single application entry point.
-- [ ] Add the application version to the backend and dashboard.
-- [ ] Validate configuration at startup with useful error messages.
-- [ ] Keep deployment configuration and application binaries separate.
-- [ ] Ensure all data paths remain writable and relative to the deployment
+- [x] Define a single application entry point.
+- [x] Add the application version to the backend and dashboard.
+- [x] Validate configuration at startup with useful error messages.
+- [x] Keep deployment configuration and application binaries separate.
+- [x] Ensure all data paths remain writable and relative to the deployment
   configuration.
-- [ ] Prevent multiple collector instances from using the same deployment
+- [x] Prevent multiple collector instances from using the same deployment
   directory.
-- [ ] Detect and explain when dashboard port `8000` is occupied.
+- [x] Detect and explain when dashboard port `8000` is occupied.
 
 ### Acceptance criteria
 
@@ -320,10 +320,10 @@ Goal: Make operation and support independent of the original development chat.
 
 Release `v1.0.0` only when every item below is complete:
 
-- [ ] Private repository and pilot baseline tag exist.
-- [ ] Reproducible `uv` environment and lockfile exist.
-- [ ] Automated tests pass.
-- [ ] Read-only Modbus behavior is verified.
+- [x] Private repository and pilot baseline tag exist.
+- [x] Reproducible `uv` environment and lockfile exist.
+- [x] Automated tests pass.
+- [x] Read-only Modbus behavior is verified.
 - [ ] Historical filtering and filtered exports work.
 - [ ] Reconnection and automatic startup work.
 - [ ] Retention, backup, and recovery are documented and tested.
@@ -357,3 +357,4 @@ Record meaningful production decisions here as they are approved.
 | 2026-08-24 | Keep production Modbus communication read-only | Protect the electrical process and equipment | MC95 |
 | 2026-08-24 | Use `uv` for development and PyInstaller for Windows deployment | Reproducible development plus offline operation | MC95 |
 | 2026-08-24 | Support Python 3.13 for the production-ready development baseline | Match the successfully tested development and Windows build environment | MC95 |
+| 2026-08-24 | Use `src/vfreg_visor` with one production CLI entry point | Separate responsibilities while keeping the confirmed device protocol unchanged | MC95 |

@@ -73,6 +73,16 @@ Test-NetConnection 192.168.1.7 -Port 502
 Double-click `run_factory_preflight.bat`, then
 `start_factory_collector.bat`. Open `http://127.0.0.1:8000`.
 
+The supported command-line entry point is also available directly:
+
+```powershell
+uv run --locked vfreg-visor --config config.factory.json
+```
+
+At startup, the application validates the configuration and writable data
+directory, prevents a second collector from using the same deployment folder,
+and explains if dashboard port `8000` is already occupied or blocked.
+
 The confirmed runtime settings are Modbus TCP at `192.168.1.7:502`, unit 5,
 function 04, registers 0-2. The runtime values are live and are never replaced
 with the original discovery values.

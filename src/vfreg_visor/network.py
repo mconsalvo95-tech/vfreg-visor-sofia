@@ -9,7 +9,7 @@ import threading
 from collections.abc import Callable
 from typing import Any, Optional
 
-from storage import Measurement, StorageWriter, now_iso
+from .storage import Measurement, StorageWriter, now_iso
 
 
 VALUE_PATTERNS = {
@@ -369,28 +369,7 @@ def start_network_servers(
     on_measurement: Optional[Callable[[Measurement], None]] = None,
 ) -> NetworkCollector:
     if cfg.get("network", {}).get("mode") == "modbus_tcp_client":
-        from modbus_client import ModbusTcpCollector
+        from .modbus import ModbusTcpCollector
 
         return ModbusTcpCollector(cfg, writer).start()  # type: ignore[return-value]
     return NetworkCollector(cfg, writer, on_measurement).start()
-
-
-def main() -> None:
-    with open("config.json", "r", encoding="utf-8") as handle:
-        cfg = json.load(handle)
-    writer = StorageWriter(cfg["output_sqlite"], cfg["raw_journal"])
-    collector = start_network_servers(cfg, writer, print)
-    print(
-        f"Listening on TCP {cfg['network']['tcp_port']} and "
-        f"UDP {cfg['network']['udp_port']}. Press Ctrl+C to stop."
-    )
-    try:
-        while True:
-            threading.Event().wait(3600)
-    except KeyboardInterrupt:
-        collector.stop()
-        writer.close()
-
-
-if __name__ == "__main__":
-    main()

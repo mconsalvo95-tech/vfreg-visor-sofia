@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 import time
 
-from network_listener import parse_payload
-from simulator_sender import build_packet
-from storage import StorageWriter
+from .network import parse_payload
+from .simulator import build_packet
+from .storage import StorageWriter
 
 
 def main() -> None:

@@ -30,6 +30,8 @@ if (-not $DistRoot) {
 $workRoot = Join-Path $projectRoot "build\portable-work"
 $specRoot = Join-Path $projectRoot "build\portable-spec"
 $dashboardSource = Join-Path $projectRoot "dashboard"
+$sourceRoot = Join-Path $projectRoot "src"
+$launcher = Join-Path $projectRoot "scripts\vfreg_launcher.py"
 New-Item -ItemType Directory -Force -Path $DistRoot, $workRoot, $specRoot | Out-Null
 
 & $PythonPath -m PyInstaller `
@@ -41,10 +43,10 @@ New-Item -ItemType Directory -Force -Path $DistRoot, $workRoot, $specRoot | Out-
     --distpath $DistRoot `
     --workpath $workRoot `
     --specpath $specRoot `
-    --paths $projectRoot `
+    --paths $sourceRoot `
     --add-data "${dashboardSource}:dashboard" `
     --hidden-import "openpyxl" `
-    "app.py"
+    $launcher
 
 if ($LASTEXITCODE -ne 0) {
     throw "PyInstaller failed with exit code $LASTEXITCODE."

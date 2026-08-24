@@ -8,14 +8,10 @@ import socket
 import time
 from datetime import datetime
 
+from .config import default_config_path, load_config
 
 def now_iso() -> str:
     return datetime.now().astimezone().isoformat(timespec="milliseconds")
-
-
-def load_config(path: str) -> dict:
-    with open(path, "r", encoding="utf-8") as handle:
-        return json.load(handle)
 
 
 def build_packet(sequence: int, cfg: dict, scenario: str = "normal") -> dict:
@@ -53,7 +49,7 @@ def build_packet(sequence: int, cfg: dict, scenario: str = "normal") -> dict:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Send simulated VFREG measurements")
-    parser.add_argument("--config", default="config.json")
+    parser.add_argument("--config", default=str(default_config_path()))
     parser.add_argument("--host", help="Collector IP address")
     parser.add_argument("--port", type=int)
     parser.add_argument("--protocol", choices=("udp", "tcp"))

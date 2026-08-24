@@ -8,5 +8,5 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-uv run --locked python app.py --config config.factory.json
+uv run --locked vfreg-visor --config config.factory.json
 pause

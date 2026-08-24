@@ -8,6 +8,6 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-uv run --locked python preflight.py
+uv run --locked vfreg-preflight
 echo.
 pause

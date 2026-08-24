@@ -8,5 +8,5 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-uv run --locked python app.py
+uv run --locked vfreg-visor
 pause
