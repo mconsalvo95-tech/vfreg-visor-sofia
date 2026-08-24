@@ -28,7 +28,11 @@ from vfreg_visor.config import (  # noqa: E402
     load_config,
     persist_poll_interval,
 )
-from vfreg_visor.cli import StartupError, _create_dashboard_server  # noqa: E402
+from vfreg_visor.cli import (  # noqa: E402
+    StartupError,
+    _create_dashboard_server,
+    open_dashboard,
+)
 from vfreg_visor.dashboard import (  # noqa: E402
     DashboardHandler,
     DashboardServer,
@@ -587,7 +591,7 @@ class StatusTests(unittest.TestCase):
                     f"http://127.0.0.1:{server.server_port}/api/status", timeout=3
                 ) as response:
                     status = json.load(response)
-                self.assertEqual(status["app_version"], "0.3.0.dev0")
+                self.assertEqual(status["app_version"], "0.3.0.dev1")
                 with urllib.request.urlopen(
                     f"http://127.0.0.1:{server.server_port}/", timeout=3
                 ) as response:
@@ -662,6 +666,16 @@ class PortableConfigTests(unittest.TestCase):
 
 
 class StartupSafetyTests(unittest.TestCase):
+    def test_portable_launcher_opens_default_browser(self) -> None:
+        opened_urls: list[str] = []
+
+        def remember_url(url: str) -> bool:
+            opened_urls.append(url)
+            return True
+
+        self.assertTrue(open_dashboard("http://127.0.0.1:8000", remember_url))
+        self.assertEqual(opened_urls, ["http://127.0.0.1:8000"])
+
     def _factory_config(self) -> dict:
         with (PROJECT_ROOT / "config.example.json").open("r", encoding="utf-8") as handle:
             return json.load(handle)

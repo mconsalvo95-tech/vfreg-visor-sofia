@@ -3,6 +3,9 @@ from __future__ import annotations
 import argparse
 import errno
 import sys
+import threading
+import webbrowser
+from collections.abc import Callable
 from pathlib import Path
 from typing import Sequence
 
@@ -45,7 +48,26 @@ def _create_dashboard_server(host: str, port: int) -> DashboardServer:
         raise StartupError(f"Dashboard could not bind to {host}:{port}: {error}") from error
 
 
-def run(config_path: str | Path) -> None:
+def open_dashboard(
+    url: str,
+    browser_opener: Callable[[str], bool] = webbrowser.open_new_tab,
+) -> bool:
+    """Open the local dashboard without making browser failure fatal."""
+    try:
+        opened = bool(browser_opener(url))
+    except (OSError, webbrowser.Error):
+        opened = False
+    if not opened:
+        print(f"Browser did not open automatically. Open {url} manually.")
+    return opened
+
+
+def run(
+    config_path: str | Path,
+    *,
+    open_browser: bool = False,
+    browser_opener: Callable[[str], bool] = webbrowser.open_new_tab,
+) -> None:
     resolved_config = Path(config_path).resolve()
     cfg = load_config(resolved_config)
     ensure_runtime_paths_writable(cfg)
@@ -75,8 +97,9 @@ def run(config_path: str | Path) -> None:
             server.collector = collector
             server.writer = writer
 
+            dashboard_url = f"http://{host}:{port}"
             print(f"VFREG Visor {__version__}")
-            print(f"Dashboard: http://{host}:{port}")
+            print(f"Dashboard: {dashboard_url}")
             if cfg["network"].get("mode") == "modbus_tcp_client":
                 modbus = cfg["network"]["modbus"]
                 first_register = int(modbus["start_register"])
@@ -94,6 +117,14 @@ def run(config_path: str | Path) -> None:
                     f"({'confirmed' if cfg['network'].get('port_confirmed') else 'test port, unconfirmed'})"
                 )
             print("Runtime data:", Path(cfg["output_sqlite"]).parent)
+            if open_browser:
+                browser_timer = threading.Timer(
+                    0.5,
+                    open_dashboard,
+                    args=(dashboard_url, browser_opener),
+                )
+                browser_timer.daemon = True
+                browser_timer.start()
             try:
                 server.serve_forever()
             except KeyboardInterrupt:
@@ -106,10 +137,14 @@ def run(config_path: str | Path) -> None:
             server.server_close()
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(
+    argv: Sequence[str] | None = None,
+    *,
+    open_browser: bool = False,
+) -> int:
     args = parse_args(argv)
     try:
-        run(args.config)
+        run(args.config, open_browser=open_browser)
     except (ConfigError, InstanceAlreadyRunning, StartupError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 2

@@ -1,7 +1,7 @@
 # VFREG Visor — Project Handoff
 
 Last updated: 2026-08-24
-Current development version: `0.3.0.dev0`
+Current development version: `0.3.0.dev1`
 Production-readiness status: Phase 4 complete
 
 ## User communication
@@ -86,7 +86,8 @@ Wireshark on the factory computer.
   readings, CSV, XLSX, and invalid-range cases.
 - Both simulator and factory configurations pass the new schema validation.
 - The Phase 4 PyInstaller package builds and its executable reports
-  `VFREG Visor 0.3.0.dev0` in an offline smoke test.
+  `VFREG Visor 0.3.0.dev1` in an offline smoke test. The portable launcher opens
+  the local dashboard in the Windows default browser automatically.
 - An 18,522-reading XLSX export was validated with all readings preserved and
   2,000 sampled chart points.
 - Existing database schema, relative data paths, exports, and confirmed Modbus
