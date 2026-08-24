@@ -55,7 +55,7 @@ Goal: Preserve the exact version that passed the company-PC pilot.
 - [x] Add a sanitized `config.example.json`.
 - [x] Keep the real deployment configuration outside public history.
 - [x] Create the first clean commit.
-- [ ] Tag the proven baseline as `v0.1.0-pilot-success`.
+- [x] Tag the proven baseline as `v0.1.0-pilot-success`.
 - [ ] Store the matching portable ZIP and its SHA-256 checksum as release
   artifacts.
 
