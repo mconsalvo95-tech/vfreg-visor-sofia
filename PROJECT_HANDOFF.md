@@ -1,8 +1,9 @@
 # VFREG Visor — Project Handoff
 
-Last updated: 2026-08-24
+Last updated: 2026-08-25
 Current development version: `0.4.0.dev0`
-Production-readiness status: Phase 5 complete
+Production-readiness status: Phase 6B functional foundation implemented;
+approved company logo/icon assets and stakeholder review pending
 
 ## User communication
 
@@ -49,7 +50,7 @@ The private GitHub repository is `mconsalvo95-tech/vfreg-visor-sofia`.
 - `src/vfreg_visor/network.py`: simulator listeners and collector selection.
 - `src/vfreg_visor/storage.py`: SQLite, events, CSV, and raw journal.
 - `src/vfreg_visor/exports.py`: XLSX export and charts.
-- `dashboard/`: browser UI.
+- `dashboard/`: Spanish operator UI with Live, History, and Reports sections.
 - `tests/`: automated protocol, storage, export, and startup-safety tests.
 - `config.example.json`: safe configuration template.
 - `config.factory.json`: local deployment configuration, excluded from Git.
@@ -82,8 +83,8 @@ Wireshark on the factory computer.
 
 - The company-PC pilot succeeded with the real viewer.
 - Phase 2 reproducible environment was merged through PR #1.
-- Phase 5 validation passes 51 automated tests, including HTTP-level filtered
-  readings, CSV, XLSX, and invalid-range cases.
+- Phase 6B validation passes 58 automated tests, including HTTP-level filtered
+  readings, CSV, XLSX, dashboard contracts, and invalid-range cases.
 - Both simulator and factory configurations pass the new schema validation.
 - The reviewed Phase 4 PyInstaller package builds and its executable reports
   `VFREG Visor 0.3.0.dev1` in an offline smoke test. The portable launcher opens
@@ -98,9 +99,15 @@ Wireshark on the factory computer.
   2,000 sampled chart points.
 - Existing database schema, relative data paths, exports, and confirmed Modbus
   mapping remain compatible.
+- Phase 6B adds the approved **VFREG · SOFIA** visual foundation, keeps routine
+  technical information collapsed, and separates connection state from process
+  state. Zero/near-zero Volts and mAmp with continuing frequency appears as
+  **Producción detenida** while the device remains **Conectado**; raw readings
+  are never rewritten or discarded.
 
 ## Next work
 
-Follow `PRODUCTION_READINESS_ROADMAP.md`. The next planned work is the UI/UX
-refinement checkpoint, followed by Phase 6 runtime reliability. Keep the
-production Modbus path strictly read-only while that work proceeds.
+Follow `PRODUCTION_READINESS_ROADMAP.md`. Review the Phase 6B production UI,
+replace the logo placeholder only when approved brand assets are supplied, and
+then continue with Phase 6C chart/history interaction. Keep the production
+Modbus path strictly read-only while that work proceeds.

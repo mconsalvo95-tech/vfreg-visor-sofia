@@ -35,6 +35,13 @@ release.
   commands, and tested recovery of WAL-committed records after abrupt exit.
 - Added explicit Modbus data-gap events and backend quality flags for
   unverified, out-of-range, incomplete, and invalid readings.
+- Added the approved Phase 6 **VFREG · SOFIA** Spanish operator shell with
+  separate Live, History, and Reports sections while keeping routine technical
+  information collapsed.
+- Added plain-language waiting, disconnected, stale-data, storage-warning,
+  export-error, and production-paused UI states. Production pause is inferred
+  only for presentation when Volts and mAmp are zero/near zero while frequency
+  continues; collection and raw history remain unchanged.
 
 ## 0.1.0-pilot-success — 2026-08-24
 

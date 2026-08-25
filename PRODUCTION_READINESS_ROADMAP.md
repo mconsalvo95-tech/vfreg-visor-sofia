@@ -2,7 +2,8 @@
 
 Last updated: 2026-08-25
 
-Current status: Phase 6A approved; Phase 6B implementation is next
+Current status: Phase 6B functional foundation complete; approved brand assets
+and stakeholder review are pending
 
 Target milestone: `v1.0.0`
 
@@ -212,19 +213,21 @@ management exports without changing collection, storage, or device behavior.
 
 ### Phase 6B — Dashboard visual foundation
 
-- [ ] Add the approved company logo, custom application icon, browser favicon,
-  and **VFREG · SOFIA** product identity.
-- [ ] Implement operator-facing navigation with **Live monitoring**,
+- [x] Add the **VFREG · SOFIA** product identity and a reserved company-logo
+  position without inventing an unapproved brand mark.
+- [ ] Replace the placeholder with the approved company logo, custom
+  application icon, and browser favicon when those assets are supplied.
+- [x] Implement operator-facing navigation with **Live monitoring**,
   **History**, and **Reports** while keeping routine diagnostics outside the
   normal operator view.
-- [ ] Implement the approved modern light-industrial visual system with a dark
+- [x] Implement the approved modern light-industrial visual system with a dark
   branded header, high-contrast typography, large measurements, consistent
   spacing, subtle borders, and controls suitable for the factory display.
-- [ ] Give Volts, mAmp, and frequency distinct, consistent visual identities
+- [x] Give Volts, mAmp, and frequency distinct, consistent visual identities
   while never relying on color alone to communicate status.
-- [ ] Add the approved branded launch/connection experience with understandable
+- [x] Add the approved branded launch/connection experience with understandable
   progress and a retry action when startup cannot reach the device.
-- [ ] Implement clear empty, loading, production-paused, disconnected,
+- [x] Implement clear empty, loading, production-paused, disconnected,
   stale-data, degraded-storage, and export-error states. Keep connection and
   process state independent: zero/near-zero Volts and mAmp with continuing
   frequency is **Production paused**, not a connection fault.
@@ -532,3 +535,4 @@ Record meaningful production decisions here as they are approved.
 | 2026-08-25 | Keep Power BI integration inactive as a documented future option | Prioritize the formats employees currently use | MC95 |
 | 2026-08-25 | Approve the Phase 6A mockup and proceed to Phase 6B, with final color refinement deferred | The structure and interaction are approved; operational behavior has priority over visual polish | MC95 |
 | 2026-08-25 | Treat zero/near-zero Volts and mAmp with continuing frequency as Production paused while Connected | This condition was observed during the 2026-08-21 factory stop and must not be mistaken for disconnection or missing data | MC95 |
+| 2026-08-25 | Keep Phase 6B pause detection in the dashboard layer and preserve every raw reading | Improve operator guidance without changing the confirmed collector, protocol, or stored evidence | MC95 |
