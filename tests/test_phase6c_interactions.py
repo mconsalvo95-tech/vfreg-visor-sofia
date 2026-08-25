@@ -1,0 +1,71 @@
+from __future__ import annotations
+
+import json
+import unittest
+from pathlib import Path
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DASHBOARD_ROOT = PROJECT_ROOT / "dashboard"
+
+
+class Phase6CInteractionTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.html = (DASHBOARD_ROOT / "index.html").read_text(encoding="utf-8")
+        cls.javascript = (DASHBOARD_ROOT / "app.js").read_text(encoding="utf-8")
+        cls.styles = (DASHBOARD_ROOT / "styles.css").read_text(encoding="utf-8")
+
+    def test_one_shared_range_offers_every_approved_scope(self) -> None:
+        for token in (
+            'data-range-minutes="5"',
+            'data-range-minutes="15"',
+            'data-range-minutes="30"',
+            'data-range-minutes="60"',
+            'id="workday-filter"',
+            'id="history-filter-form"',
+            'id="history-from"',
+            'id="history-to"',
+        ):
+            self.assertIn(token, self.html)
+        self.assertIn("function resolvedRange", self.javascript)
+        self.assertIn("production_start_time", self.javascript)
+
+    def test_range_drives_chart_table_counts_and_filtered_exports(self) -> None:
+        self.assertIn("loadActiveRange", self.javascript)
+        self.assertIn("renderHistory(result.readings", self.javascript)
+        self.assertIn("drawChart(currentReadings)", self.javascript)
+        self.assertIn("elements.csvExport.href", self.javascript)
+        self.assertIn("elements.xlsxExport.href", self.javascript)
+        self.assertIn("elements.recordCount.textContent", self.javascript)
+
+    def test_quality_filter_is_presentational_and_historical_export_is_separate(self) -> None:
+        for quality in ("all", "valid", "alarm"):
+            self.assertIn(f'data-quality-filter="{quality}"', self.html)
+        self.assertIn('id="historical-csv-export"', self.html)
+        self.assertIn("filterQuery({ historical: true })", self.javascript)
+        self.assertIn("if (!historical && range.from)", self.javascript)
+        self.assertNotIn("/api/delete", self.javascript)
+        self.assertNotIn("/api/modbus", self.javascript)
+
+    def test_chart_has_sparklines_modes_zoom_tooltip_and_reset(self) -> None:
+        for element_id in (
+            "voltage-sparkline",
+            "current-sparkline",
+            "frequency-sparkline",
+            "chart-zoom",
+            "chart-reset",
+            "chart-tooltip",
+        ):
+            self.assertIn(f'id="{element_id}"', self.html)
+        self.assertIn('data-chart-mode="overview"', self.html)
+        self.assertIn("function showChartTooltip", self.javascript)
+        self.assertIn("position: sticky", self.styles)
+
+    def test_example_configuration_defines_six_am_workday(self) -> None:
+        config = json.loads((PROJECT_ROOT / "config.example.json").read_text(encoding="utf-8"))
+        self.assertEqual(config["factory"]["production_start_time"], "06:00")
+
+
+if __name__ == "__main__":
+    unittest.main()

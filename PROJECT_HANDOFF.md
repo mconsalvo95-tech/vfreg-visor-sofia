@@ -104,10 +104,17 @@ Wireshark on the factory computer.
   state. Zero/near-zero Volts and mAmp with continuing frequency appears as
   **Producción detenida** while the device remains **Conectado**; raw readings
   are never rewritten or discarded.
+- Phase 6C adds one shared 5/15/30/60-minute, current-workday, or custom period
+  for trends, history, counts, and filtered downloads. It also adds compact
+  metric trends, overview/detail charts, zoom, exact-value tooltips, table-only
+  quality filters, a sticky table header, and a separate full-history-to-cutoff
+  CSV. These controls query stored data only and never mutate collection.
+- The current-workday start is configured with
+  `factory.production_start_time` and defaults to `06:00`.
 
 ## Next work
 
-Follow `PRODUCTION_READINESS_ROADMAP.md`. Review the Phase 6B production UI,
-replace the logo placeholder only when approved brand assets are supplied, and
-then continue with Phase 6C chart/history interaction. Keep the production
+Follow `PRODUCTION_READINESS_ROADMAP.md`. Review the Phase 6C chart/history
+interaction and then continue with Phase 6D export redesign. Keep the logo
+placeholder until approved brand assets are supplied, and keep the production
 Modbus path strictly read-only while that work proceeds.

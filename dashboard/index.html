@@ -41,6 +41,29 @@
   </header>
 
   <main id="main-content">
+    <section class="panel shared-range" aria-labelledby="shared-range-title">
+      <div class="range-summary">
+        <p class="eyebrow">Período de trabajo</p>
+        <h2 id="shared-range-title">Un período para gráficos, historial y descargas</h2>
+        <strong id="active-range-label">Últimos 15 minutos</strong>
+      </div>
+      <div class="preset-filters" aria-label="Períodos rápidos">
+        <button type="button" data-range-minutes="5">5 min</button>
+        <button type="button" data-range-minutes="15" data-active="true">15 min</button>
+        <button type="button" data-range-minutes="30">30 min</button>
+        <button type="button" data-range-minutes="60">1 hora</button>
+        <button type="button" id="workday-filter">Jornada actual</button>
+        <button type="button" id="custom-range-toggle" aria-expanded="false" aria-controls="history-filter-form">Personalizado</button>
+      </div>
+      <form class="custom-filter" id="history-filter-form" hidden>
+        <label for="history-from">Desde<input id="history-from" type="datetime-local" step="1" required></label>
+        <label for="history-to">Hasta<input id="history-to" type="datetime-local" step="1" required></label>
+        <button class="primary-button filter-apply" type="submit">Aplicar</button>
+        <button class="secondary-button filter-clear" id="history-filter-clear" type="button">Limpiar</button>
+      </form>
+      <span class="filter-result" id="history-filter-result" role="status">Cargando últimos 15 minutos…</span>
+    </section>
+
     <section class="app-view is-active" id="view-live" data-view-panel="live">
       <div class="page-heading">
         <div>
@@ -78,6 +101,7 @@
             <span class="quality-badge" id="quality-voltage"><b aria-hidden="true">…</b> Esperando</span>
           </div>
           <div class="metric-value"><strong id="voltage">--</strong><span>V</span></div>
+          <canvas class="metric-sparkline" id="voltage-sparkline" aria-label="Tendencia compacta de voltaje"></canvas>
         </article>
 
         <article class="metric-card current-card" data-quality="waiting">
@@ -87,6 +111,7 @@
             <span class="quality-badge" id="quality-current"><b aria-hidden="true">…</b> Esperando</span>
           </div>
           <div class="metric-value"><strong id="current">--</strong><span>mA</span></div>
+          <canvas class="metric-sparkline" id="current-sparkline" aria-label="Tendencia compacta de corriente"></canvas>
         </article>
 
         <article class="metric-card frequency-card" data-quality="waiting">
@@ -96,6 +121,7 @@
             <span class="quality-badge" id="quality-frequency"><b aria-hidden="true">…</b> Esperando</span>
           </div>
           <div class="metric-value"><strong id="frequency">--</strong><span>Hz</span></div>
+          <canvas class="metric-sparkline" id="frequency-sparkline" aria-label="Tendencia compacta de frecuencia"></canvas>
         </article>
       </section>
 
@@ -120,15 +146,26 @@
       <section class="panel chart-section" aria-labelledby="live-chart-title">
         <div class="panel-header">
           <div><p class="eyebrow">Tendencias</p><h2 id="live-chart-title">Comportamiento en el tiempo</h2></div>
-          <div class="chart-legend" aria-label="Referencias del gráfico">
-            <span class="legend-voltage">Voltaje</span>
-            <span class="legend-current">Corriente</span>
-            <span class="legend-frequency">Frecuencia</span>
+          <div class="chart-actions">
+            <div class="chart-modes" aria-label="Variable del gráfico">
+              <button type="button" data-chart-mode="overview" data-active="true">Resumen</button>
+              <button type="button" data-chart-mode="voltage_v">Voltaje</button>
+              <button type="button" data-chart-mode="current_ma">Corriente</button>
+              <button type="button" data-chart-mode="frequency_hz">Frecuencia</button>
+            </div>
+            <label class="zoom-control" for="chart-zoom">Zoom <input id="chart-zoom" type="range" min="1" max="4" step="1" value="1"></label>
+            <button class="secondary-button chart-reset" id="chart-reset" type="button">Restablecer</button>
           </div>
+        </div>
+        <div class="chart-legend" aria-label="Referencias del gráfico">
+          <span class="legend-voltage">Voltaje</span>
+          <span class="legend-current">Corriente</span>
+          <span class="legend-frequency">Frecuencia</span>
         </div>
         <div class="chart-wrap">
           <canvas id="history-chart" aria-label="Gráfico reciente de voltaje, corriente y frecuencia"></canvas>
           <p class="empty-chart" id="empty-chart">Esperando lecturas</p>
+          <div class="chart-tooltip" id="chart-tooltip" role="status" hidden></div>
         </div>
       </section>
     </section>
@@ -139,24 +176,16 @@
         <div class="page-count"><strong id="record-count">0</strong><span id="record-count-label">lecturas guardadas</span></div>
       </div>
 
-      <section class="panel history-controls" aria-label="Filtros de historial">
-        <div class="preset-filters" aria-label="Períodos rápidos">
-          <span>Mostrar</span>
-          <button type="button" data-minutes="5">Últimos 5 min</button>
-          <button type="button" data-minutes="15">15 min</button>
-          <button type="button" data-minutes="30">30 min</button>
-          <button type="button" data-minutes="60">1 hora</button>
-          <button type="button" id="today-filter">Hoy</button>
+      <section class="panel history-controls" aria-label="Calidad de las lecturas">
+        <div class="quality-filters" role="group" aria-label="Filtrar por calidad">
+          <span>Calidad</span>
+          <button type="button" data-quality-filter="all" data-active="true">Todas</button>
+          <button type="button" data-quality-filter="valid">Válidas</button>
+          <button type="button" data-quality-filter="alarm">Fuera de rango</button>
         </div>
-        <form class="custom-filter" id="history-filter-form">
-          <label for="history-from">Desde<input id="history-from" type="datetime-local" step="1"></label>
-          <label for="history-to">Hasta<input id="history-to" type="datetime-local" step="1"></label>
-          <button class="primary-button filter-apply" type="submit">Aplicar</button>
-          <button class="secondary-button filter-clear" id="history-filter-clear" type="button">Limpiar</button>
-        </form>
         <div class="filter-feedback">
-          <strong id="history-mode">Vista en vivo</strong>
-          <span class="filter-result" id="history-filter-result" role="status">Mostrando lecturas recientes</span>
+          <strong id="history-mode">Últimos 15 minutos</strong>
+          <span>Este filtro solo cambia la tabla; las descargas conservan todas las lecturas del período.</span>
         </div>
       </section>
 
@@ -181,7 +210,7 @@
 
       <section class="panel report-period">
         <div><span>Período seleccionado</span><strong id="export-period">Todo el historial almacenado</strong></div>
-        <button class="secondary-button" type="button" data-view-target="history">Cambiar período</button>
+        <button class="secondary-button" type="button" id="focus-range-controls">Cambiar período</button>
       </section>
 
       <section class="report-grid" aria-label="Formatos de descarga">
@@ -194,6 +223,11 @@
           <span class="format-icon">XLSX</span>
           <div><h2>Excel con gráficos</h2><p>Lecturas y gráficos separados para revisión administrativa.</p></div>
           <a class="primary-button" id="xlsx-export" href="/api/export.xlsx" download>Descargar XLSX</a>
+        </article>
+        <article class="report-card historical-card">
+          <span class="format-icon">HIST</span>
+          <div><h2>Histórico completo</h2><p>CSV con todo lo almacenado hasta el final del período seleccionado. No aplica el filtro de calidad de la tabla.</p></div>
+          <a class="primary-button" id="historical-csv-export" href="/api/export.csv" download>Descargar histórico</a>
         </article>
       </section>
       <p class="export-status" id="export-status" role="status"></p>

@@ -42,6 +42,13 @@ release.
   export-error, and production-paused UI states. Production pause is inferred
   only for presentation when Volts and mAmp are zero/near zero while frequency
   continues; collection and raw history remain unchanged.
+- Added a shared time period for live trends, history, matching counts, and
+  filtered CSV/XLSX downloads, with 5/15/30/60-minute, current-workday, and
+  validated custom ranges.
+- Added card sparklines, overview and single-metric chart modes, zoom, exact
+  value tooltips, sticky history headers, table-only quality filters, and a
+  separate historical CSV through the selected cutoff. Raw stored readings,
+  including zero values and gaps, remain unchanged.
 
 ## 0.1.0-pilot-success — 2026-08-24
 

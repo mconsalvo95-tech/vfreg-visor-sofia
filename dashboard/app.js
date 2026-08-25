@@ -41,8 +41,15 @@ const elements = {
   appVersion: document.querySelector("#app-version"),
   emptyChart: document.querySelector("#empty-chart"),
   canvas: document.querySelector("#history-chart"),
+  chartTooltip: document.querySelector("#chart-tooltip"),
+  chartZoom: document.querySelector("#chart-zoom"),
+  chartReset: document.querySelector("#chart-reset"),
+  voltageSparkline: document.querySelector("#voltage-sparkline"),
+  currentSparkline: document.querySelector("#current-sparkline"),
+  frequencySparkline: document.querySelector("#frequency-sparkline"),
   csvExport: document.querySelector("#csv-export"),
   xlsxExport: document.querySelector("#xlsx-export"),
+  historicalCsvExport: document.querySelector("#historical-csv-export"),
   exportPeriod: document.querySelector("#export-period"),
   exportStatus: document.querySelector("#export-status"),
   samplingForm: document.querySelector("#sampling-form"),
@@ -55,13 +62,21 @@ const elements = {
   historyTo: document.querySelector("#history-to"),
   historyFilterClear: document.querySelector("#history-filter-clear"),
   historyFilterResult: document.querySelector("#history-filter-result"),
-  todayFilter: document.querySelector("#today-filter")
+  activeRangeLabel: document.querySelector("#active-range-label"),
+  workdayFilter: document.querySelector("#workday-filter"),
+  customRangeToggle: document.querySelector("#custom-range-toggle"),
+  focusRangeControls: document.querySelector("#focus-range-controls")
 };
 
 let currentReadings = [];
+let currentRangeCount = 0;
 let latestStatusData = null;
-let activeRange = null;
+let activeRange = { key: "15m", minutes: 15, label: "Últimos 15 minutos", rolling: true };
 let currentView = "live";
+let historyQuality = "all";
+let chartMode = "overview";
+let chartPoints = [];
+let rangeRefreshBusy = false;
 
 function isNumeric(value) {
   return value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
@@ -287,19 +302,29 @@ function updateConnectionAndProcess(data, mode) {
 }
 
 function renderReadings(readings) {
+  const filtered = readings.filter((reading) => {
+    const mode = rowMode(reading);
+    if (historyQuality === "alarm") return mode === "alarm";
+    if (historyQuality === "valid") return mode !== "alarm";
+    return true;
+  });
+  elements.recordCount.textContent = filtered.length.toLocaleString("es-AR");
+  elements.recordCountLabel.textContent = filtered.length === currentRangeCount
+    ? "lecturas del período"
+    : `de ${currentRangeCount.toLocaleString("es-AR")} lecturas del período`;
   elements.recordsBody.replaceChildren();
-  if (!readings.length) {
+  if (!filtered.length) {
     const row = document.createElement("tr");
     const cell = document.createElement("td");
     cell.colSpan = 6;
     cell.className = "empty-row";
-    cell.textContent = activeRange ? "No hay lecturas en este período" : "Esperando lecturas";
+    cell.textContent = readings.length ? "No hay lecturas con esta calidad" : "No hay lecturas en este período";
     row.appendChild(cell);
     elements.recordsBody.appendChild(row);
     return;
   }
 
-  readings.slice(-15).reverse().forEach((reading) => {
+  filtered.slice(-50).reverse().forEach((reading) => {
     const row = document.createElement("tr");
     const mode = rowMode(reading);
     const timestamp = timestampParts(reading.timestamp);
@@ -320,15 +345,16 @@ function renderReadings(readings) {
     });
     elements.recordsBody.appendChild(row);
   });
+
 }
 
 function renderHistory(readings, count, modeLabel) {
   currentReadings = readings || [];
-  elements.recordCount.textContent = Number(count || 0).toLocaleString("es-AR");
-  elements.recordCountLabel.textContent = activeRange ? "lecturas coincidentes" : "lecturas guardadas";
+  currentRangeCount = Number(count || 0);
   elements.historyMode.textContent = modeLabel;
   renderReadings(currentReadings);
   drawChart(currentReadings);
+  drawSparklines(currentReadings);
 }
 
 function renderStatus(data) {
@@ -364,11 +390,54 @@ function renderStatus(data) {
   updateConnectionAndProcess(data, mode);
   updateMetrics(data, mode);
   updateSystemBanner(data, mode);
-  if (!activeRange) renderHistory(data.readings || [], data.summary?.count || 0, "Vista en vivo");
+}
+
+const CHART_SERIES = Object.freeze([
+  { key: "voltage_v", color: "#0b929d", label: "Voltaje", unit: "V", digits: 1 },
+  { key: "current_ma", color: "#7255a5", label: "Corriente", unit: "mA", digits: 0 },
+  { key: "frequency_hz", color: "#c47a13", label: "Frecuencia", unit: "Hz", digits: 1 }
+]);
+
+function visibleChartReadings(readings) {
+  const valid = readings.filter((row) => CHART_SERIES.every((series) => isNumeric(row[series.key])));
+  const zoom = Number(elements.chartZoom.value || 1);
+  const visibleCount = Math.max(2, Math.ceil(valid.length / zoom));
+  return valid.slice(-visibleCount);
+}
+
+function drawSparkline(canvas, readings, series) {
+  const values = readings.slice(-40).filter((row) => isNumeric(row[series.key])).map((row) => Number(row[series.key]));
+  const bounds = canvas.getBoundingClientRect();
+  if (!bounds.width || !bounds.height) return;
+  const ratio = window.devicePixelRatio || 1;
+  canvas.width = Math.floor(bounds.width * ratio);
+  canvas.height = Math.floor(bounds.height * ratio);
+  const context = canvas.getContext("2d");
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  context.clearRect(0, 0, bounds.width, bounds.height);
+  if (values.length < 2) return;
+  let minimum = Math.min(...values);
+  let maximum = Math.max(...values);
+  if (minimum === maximum) { minimum -= 1; maximum += 1; }
+  context.strokeStyle = series.color;
+  context.lineWidth = 1.7;
+  context.beginPath();
+  values.forEach((value, index) => {
+    const x = 2 + (index / (values.length - 1)) * (bounds.width - 4);
+    const y = bounds.height - 3 - ((value - minimum) / (maximum - minimum)) * (bounds.height - 6);
+    if (index === 0) context.moveTo(x, y); else context.lineTo(x, y);
+  });
+  context.stroke();
+}
+
+function drawSparklines(readings) {
+  drawSparkline(elements.voltageSparkline, readings, CHART_SERIES[0]);
+  drawSparkline(elements.currentSparkline, readings, CHART_SERIES[1]);
+  drawSparkline(elements.frequencySparkline, readings, CHART_SERIES[2]);
 }
 
 function drawChart(readings) {
-  const chartReadings = readings.filter((row) => isNumeric(row.voltage_v) && isNumeric(row.current_ma) && isNumeric(row.frequency_hz));
+  const chartReadings = visibleChartReadings(readings);
   const canvas = elements.canvas;
   const bounds = canvas.getBoundingClientRect();
   if (!bounds.width || !bounds.height) return;
@@ -378,19 +447,22 @@ function drawChart(readings) {
   const context = canvas.getContext("2d");
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
   context.clearRect(0, 0, bounds.width, bounds.height);
+  chartPoints = [];
   elements.emptyChart.hidden = chartReadings.length > 1;
   if (chartReadings.length < 2) return;
 
   const padding = { left: 62, right: 18, top: 12, bottom: 24 };
   const plotWidth = bounds.width - padding.left - padding.right;
   const plotHeight = bounds.height - padding.top - padding.bottom;
-  const lanes = [
-    { key: "voltage_v", color: "#0b929d", label: "V" },
-    { key: "current_ma", color: "#7255a5", label: "mA" },
-    { key: "frequency_hz", color: "#c47a13", label: "Hz" }
-  ];
+  const lanes = chartMode === "overview"
+    ? CHART_SERIES
+    : CHART_SERIES.filter((series) => series.key === chartMode);
   const laneHeight = plotHeight / lanes.length;
   context.font = "10px Segoe UI, Arial";
+  chartPoints = chartReadings.map((reading, index) => ({
+    reading,
+    x: padding.left + (index / (chartReadings.length - 1)) * plotWidth
+  }));
 
   lanes.forEach((lane, laneIndex) => {
     const values = chartReadings.map((row) => Number(row[lane.key]));
@@ -411,7 +483,7 @@ function drawChart(readings) {
     context.stroke();
     context.setLineDash([]);
     context.fillStyle = "#657780";
-    context.fillText(`${maximum.toFixed(0)} ${lane.label}`, 5, top + 12);
+    context.fillText(`${maximum.toFixed(lane.digits)} ${lane.unit}`, 5, top + 12);
     context.fillText(minimum.toFixed(0), 20, bottom - 5);
 
     context.strokeStyle = lane.color;
@@ -426,6 +498,30 @@ function drawChart(readings) {
     });
     context.stroke();
   });
+
+  const first = timestampParts(chartReadings[0].timestamp).time;
+  const last = timestampParts(chartReadings.at(-1).timestamp).time;
+  context.fillStyle = "#657780";
+  context.fillText(first, padding.left, bounds.height - 5);
+  context.textAlign = "right";
+  context.fillText(last, bounds.width - padding.right, bounds.height - 5);
+  context.textAlign = "left";
+}
+
+function showChartTooltip(event) {
+  if (!chartPoints.length) return;
+  const bounds = elements.canvas.getBoundingClientRect();
+  const pointerX = event.clientX - bounds.left;
+  const point = chartPoints.reduce((closest, candidate) =>
+    Math.abs(candidate.x - pointerX) < Math.abs(closest.x - pointerX) ? candidate : closest
+  );
+  const reading = point.reading;
+  elements.chartTooltip.innerHTML = `<strong>${timestampParts(reading.timestamp).full}</strong>${CHART_SERIES.map((series) =>
+    `<span>${series.label}: ${number(reading[series.key], series.digits)} ${series.unit}</span>`
+  ).join("")}`;
+  elements.chartTooltip.hidden = false;
+  elements.chartTooltip.style.left = `${Math.min(bounds.width - 190, Math.max(8, point.x + 10))}px`;
+  elements.chartTooltip.style.top = "12px";
 }
 
 function showDashboardError(error) {
@@ -465,7 +561,10 @@ function setView(view) {
     if (active) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
   });
-  if (view === "live") window.requestAnimationFrame(() => drawChart(currentReadings));
+  if (view === "live") window.requestAnimationFrame(() => {
+    drawChart(currentReadings);
+    drawSparklines(currentReadings);
+  });
 }
 
 function localInputValue(date) {
@@ -473,11 +572,31 @@ function localInputValue(date) {
   return local.toISOString().slice(0, 19);
 }
 
-function filterQuery() {
-  if (!activeRange) return "";
+function productionStartTime() {
+  return latestStatusData?.factory?.production_start_time || "06:00";
+}
+
+function resolvedRange() {
+  if (activeRange.key === "custom") return { from: activeRange.from, to: activeRange.to };
+  const to = new Date();
+  if (activeRange.key === "workday") {
+    const [hours, minutes] = productionStartTime().split(":").map(Number);
+    const from = new Date(to);
+    from.setHours(hours || 0, minutes || 0, 0, 0);
+    if (from > to) from.setDate(from.getDate() - 1);
+    return { from: localInputValue(from), to: localInputValue(to) };
+  }
+  return {
+    from: localInputValue(new Date(to.getTime() - activeRange.minutes * 60000)),
+    to: localInputValue(to)
+  };
+}
+
+function filterQuery({ historical = false } = {}) {
+  const range = resolvedRange();
   const query = new URLSearchParams();
-  if (activeRange.from) query.set("from", activeRange.from);
-  if (activeRange.to) query.set("to", activeRange.to);
+  if (!historical && range.from) query.set("from", range.from);
+  if (range.to) query.set("to", range.to);
   return `?${query.toString()}`;
 }
 
@@ -485,25 +604,29 @@ function updateExportLinks() {
   const query = filterQuery();
   elements.csvExport.href = `/api/export.csv${query}`;
   elements.xlsxExport.href = `/api/export.xlsx${query}`;
-  elements.exportPeriod.textContent = activeRange?.label || "Todo el historial almacenado";
+  elements.historicalCsvExport.href = `/api/export.csv${filterQuery({ historical: true })}`;
+  elements.exportPeriod.textContent = activeRange.label;
+  elements.activeRangeLabel.textContent = activeRange.label;
 }
 
 function selectPresetButton(selected) {
-  document.querySelectorAll(".preset-filters button").forEach((button) => {
+  document.querySelectorAll(".shared-range .preset-filters button").forEach((button) => {
     button.dataset.active = String(button === selected);
   });
 }
 
-async function applyHistoryRange(from, to, label) {
+async function loadActiveRange({ announce = true } = {}) {
+  if (rangeRefreshBusy) return;
+  const { from, to } = resolvedRange();
   if (from && to && new Date(from) > new Date(to)) {
     elements.historyFilterResult.dataset.error = "true";
     elements.historyFilterResult.textContent = "La fecha Desde debe ser anterior a Hasta";
     return;
   }
-  activeRange = { from, to, label };
+  rangeRefreshBusy = true;
   updateExportLinks();
   elements.historyFilterResult.dataset.error = "false";
-  elements.historyFilterResult.textContent = "Cargando historial…";
+  if (announce) elements.historyFilterResult.textContent = "Cargando período…";
   const query = new URLSearchParams({ limit: "5000" });
   if (from) query.set("from", from);
   if (to) query.set("to", to);
@@ -511,62 +634,64 @@ async function applyHistoryRange(from, to, label) {
     const response = await fetch(`/api/readings?${query.toString()}`, { cache: "no-store" });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
-    renderHistory(result.readings || [], result.count || 0, label || "Período filtrado");
+    renderHistory(result.readings || [], result.count || 0, activeRange.label);
     const hiddenCount = Math.max(0, Number(result.count || 0) - (result.readings || []).length);
     elements.historyFilterResult.textContent = hiddenCount
       ? `${Number(result.count).toLocaleString("es-AR")} coincidencias; se muestran las últimas 5.000`
-      : `${Number(result.count || 0).toLocaleString("es-AR")} lecturas coincidentes`;
+      : `${Number(result.count || 0).toLocaleString("es-AR")} lecturas en ${activeRange.label.toLowerCase()}`;
   } catch (error) {
-    activeRange = null;
-    selectPresetButton(null);
-    updateExportLinks();
     elements.historyFilterResult.dataset.error = "true";
     elements.historyFilterResult.textContent = error.message;
-    if (latestStatusData) renderStatus(latestStatusData);
+  } finally {
+    rangeRefreshBusy = false;
   }
 }
 
 function applyPreset(minutes, button) {
-  const to = new Date();
-  const from = new Date(to.getTime() - minutes * 60000);
-  elements.historyFrom.value = localInputValue(from);
-  elements.historyTo.value = localInputValue(to);
+  activeRange = {
+    key: `${minutes}m`,
+    minutes,
+    label: minutes === 60 ? "Última hora" : `Últimos ${minutes} minutos`,
+    rolling: true
+  };
   selectPresetButton(button);
-  const label = minutes === 60 ? "Última hora" : `Últimos ${minutes} minutos`;
-  applyHistoryRange(elements.historyFrom.value, elements.historyTo.value, label);
+  elements.historyFilterForm.hidden = true;
+  elements.customRangeToggle.setAttribute("aria-expanded", "false");
+  loadActiveRange();
 }
 
-function applyToday() {
-  const to = new Date();
-  const from = new Date(to);
-  from.setHours(0, 0, 0, 0);
-  elements.historyFrom.value = localInputValue(from);
-  elements.historyTo.value = localInputValue(to);
-  selectPresetButton(elements.todayFilter);
-  applyHistoryRange(elements.historyFrom.value, elements.historyTo.value, "Hoy");
+function applyWorkday() {
+  activeRange = { key: "workday", label: `Jornada actual · desde ${productionStartTime()}`, rolling: true };
+  selectPresetButton(elements.workdayFilter);
+  elements.historyFilterForm.hidden = true;
+  elements.customRangeToggle.setAttribute("aria-expanded", "false");
+  loadActiveRange();
 }
 
 function submitHistoryFilter(event) {
   event.preventDefault();
-  selectPresetButton(null);
   const from = elements.historyFrom.value;
   const to = elements.historyTo.value;
-  if (!from && !to) {
-    clearHistoryFilter();
+  if (!from || !to) {
+    elements.historyFilterResult.dataset.error = "true";
+    elements.historyFilterResult.textContent = "Complete Desde y Hasta para aplicar el período";
     return;
   }
-  applyHistoryRange(from, to, "Período personalizado");
+  if (new Date(from) > new Date(to)) {
+    elements.historyFilterResult.dataset.error = "true";
+    elements.historyFilterResult.textContent = "La fecha Desde debe ser anterior a Hasta";
+    return;
+  }
+  activeRange = { key: "custom", from, to, label: "Período personalizado", rolling: false };
+  selectPresetButton(elements.customRangeToggle);
+  loadActiveRange();
 }
 
 function clearHistoryFilter() {
-  activeRange = null;
   elements.historyFrom.value = "";
   elements.historyTo.value = "";
-  elements.historyFilterResult.dataset.error = "false";
-  elements.historyFilterResult.textContent = "Mostrando lecturas recientes";
-  selectPresetButton(null);
-  updateExportLinks();
-  if (latestStatusData) renderStatus(latestStatusData);
+  const defaultButton = document.querySelector('[data-range-minutes="15"]');
+  applyPreset(15, defaultButton);
 }
 
 async function downloadXlsx(event) {
@@ -635,21 +760,74 @@ elements.csvExport.addEventListener("click", () => {
   elements.exportStatus.dataset.error = "false";
   elements.exportStatus.textContent = "Descarga CSV iniciada";
 });
+elements.historicalCsvExport.addEventListener("click", () => {
+  elements.exportStatus.dataset.error = "false";
+  elements.exportStatus.textContent = "Descarga histórica iniciada";
+});
 elements.pollInterval.addEventListener("change", () => updateSamplingEstimate(elements.pollInterval.value));
 elements.samplingForm.addEventListener("submit", savePollingInterval);
 elements.historyFilterForm.addEventListener("submit", submitHistoryFilter);
 elements.historyFilterClear.addEventListener("click", clearHistoryFilter);
-elements.todayFilter.addEventListener("click", applyToday);
-document.querySelectorAll(".preset-filters button[data-minutes]").forEach((button) => {
-  button.addEventListener("click", () => applyPreset(Number(button.dataset.minutes), button));
+elements.workdayFilter.addEventListener("click", applyWorkday);
+elements.customRangeToggle.addEventListener("click", () => {
+  const opening = elements.historyFilterForm.hidden;
+  elements.historyFilterForm.hidden = !opening;
+  elements.customRangeToggle.setAttribute("aria-expanded", String(opening));
+  if (opening) {
+    const range = resolvedRange();
+    elements.historyFrom.value = range.from;
+    elements.historyTo.value = range.to;
+    elements.historyFrom.focus();
+  }
 });
+elements.focusRangeControls.addEventListener("click", () => {
+  document.querySelector(".shared-range").scrollIntoView({ behavior: "smooth", block: "start" });
+  elements.customRangeToggle.focus();
+});
+document.querySelectorAll("[data-range-minutes]").forEach((button) => {
+  button.addEventListener("click", () => applyPreset(Number(button.dataset.rangeMinutes), button));
+});
+document.querySelectorAll("[data-quality-filter]").forEach((button) => {
+  button.addEventListener("click", () => {
+    historyQuality = button.dataset.qualityFilter;
+    document.querySelectorAll("[data-quality-filter]").forEach((candidate) => {
+      candidate.dataset.active = String(candidate === button);
+    });
+    renderReadings(currentReadings);
+  });
+});
+document.querySelectorAll("[data-chart-mode]").forEach((button) => {
+  button.addEventListener("click", () => {
+    chartMode = button.dataset.chartMode;
+    document.querySelectorAll("[data-chart-mode]").forEach((candidate) => {
+      candidate.dataset.active = String(candidate === button);
+    });
+    drawChart(currentReadings);
+  });
+});
+elements.chartZoom.addEventListener("input", () => drawChart(currentReadings));
+elements.chartReset.addEventListener("click", () => {
+  chartMode = "overview";
+  elements.chartZoom.value = "1";
+  document.querySelectorAll("[data-chart-mode]").forEach((button) => {
+    button.dataset.active = String(button.dataset.chartMode === "overview");
+  });
+  drawChart(currentReadings);
+});
+elements.canvas.addEventListener("pointermove", showChartTooltip);
+elements.canvas.addEventListener("pointerleave", () => { elements.chartTooltip.hidden = true; });
 window.addEventListener("resize", () => {
-  if (currentView === "live") drawChart(currentReadings);
+  if (currentView === "live") {
+    drawChart(currentReadings);
+    drawSparklines(currentReadings);
+  }
 });
 
 updateClock();
 setView("live");
 updateExportLinks();
 refresh();
+loadActiveRange();
 window.setInterval(updateClock, 1000);
 window.setInterval(refresh, 1000);
+window.setInterval(() => loadActiveRange({ announce: false }), 5000);

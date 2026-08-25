@@ -215,8 +215,9 @@ management exports without changing collection, storage, or device behavior.
 
 - [x] Add the **VFREG · SOFIA** product identity and a reserved company-logo
   position without inventing an unapproved brand mark.
-- [ ] Replace the placeholder with the approved company logo, custom
-  application icon, and browser favicon when those assets are supplied.
+- [x] Keep a labeled placeholder until the user supplies the approved company
+  logo. Track the custom application icon and browser favicon as a future
+  brand-asset refinement so they do not block operator workflow work.
 - [x] Implement operator-facing navigation with **Live monitoring**,
   **History**, and **Reports** while keeping routine diagnostics outside the
   normal operator view.
@@ -234,23 +235,23 @@ management exports without changing collection, storage, or device behavior.
 
 ### Phase 6C — Live charts and history interaction
 
-- [ ] Use one shared time-range selector for charts, Recent Readings, the
+- [x] Use one shared time-range selector for charts, Recent Readings, the
   matching-record count, and filtered export.
-- [ ] Provide 5-minute, 15-minute, 30-minute, 1-hour, current-workday, and
+- [x] Provide 5-minute, 15-minute, 30-minute, 1-hour, current-workday, and
   custom `Desde` / `Hasta` ranges.
-- [ ] Define the current workday as the configurable production start time,
+- [x] Define the current workday as the configurable production start time,
   initially `06:00`, through the current local time.
-- [ ] Make custom ranges explicit with **Aplicar** and **Limpiar** actions, show
+- [x] Make custom ranges explicit with **Aplicar** and **Limpiar** actions, show
   the selected period, and prevent invalid or reversed ranges from running.
-- [ ] Add Recent Readings filters for **All**, **Valid**, and
+- [x] Add Recent Readings filters for **All**, **Valid**, and
   **Out of range**, with a sticky header and visible matching-record count.
-- [ ] Add compact live trends to the three measurement cards and provide both
+- [x] Add compact live trends to the three measurement cards and provide both
   synchronized overview charts and a detailed single-metric chart view.
-- [ ] Improve chart legibility, responsive behavior, zoom, exact-value
+- [x] Improve chart legibility, responsive behavior, zoom, exact-value
   tooltips, and visible reset actions.
-- [ ] Keep a separate historical export that includes all stored readings up
+- [x] Keep a separate historical export that includes all stored readings up
   to the selected cutoff, independently of the active Recent Readings filter.
-- [ ] Preserve collection gaps and incomplete/zero readings in raw exports;
+- [x] Preserve collection gaps and incomplete/zero readings in raw exports;
   filtering must never delete or rewrite stored history.
 
 ### Phase 6D — CSV and XLSX export redesign
@@ -324,6 +325,8 @@ management exports without changing collection, storage, or device behavior.
 
 - [ ] Record new UI/UX ideas discovered after Phase 6A here, then prioritize
   them only after the approved Phase 6A–6E work is stable.
+- [ ] Replace the labeled logo placeholder and add the approved application
+  icon and browser favicon when the company brand assets are supplied.
 - [ ] Keep a Power BI-ready export documented as an inactive future option; do
   not expose it in the Phase 6 application UI.
 - [ ] Revisit the approved mockup colors after operational behavior and
