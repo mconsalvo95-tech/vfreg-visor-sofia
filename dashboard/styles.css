@@ -165,20 +165,29 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 
 main { width: min(1480px, 100%); margin: 0 auto; padding: 24px; }
 .shared-range {
-  position: sticky;
-  top: 8px;
-  z-index: 20;
   margin-top: 0;
   padding: 13px 16px;
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) auto;
+  grid-template-columns: minmax(250px, 0.7fr) minmax(560px, 1.3fr);
   align-items: center;
   gap: 10px 20px;
-  box-shadow: 0 12px 28px rgba(17, 50, 64, 0.12);
+  box-shadow: 0 9px 24px rgba(17, 50, 64, 0.09);
 }
 .range-summary { display: grid; gap: 2px; }
 .range-summary h2 { font-size: 14px; }
-.range-summary strong { color: var(--brand); font-size: 11px; }
+.range-summary > span { color: var(--muted); font-size: 10px; }
+.range-picker {
+  grid-column: 1 / -1;
+  padding-top: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--line);
+}
+.range-current { min-width: 190px; display: grid; gap: 2px; }
+.range-current span { color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+.range-current strong { color: var(--brand); font-size: 11px; }
 .shared-range .custom-filter, .shared-range > .filter-result { grid-column: 1 / -1; }
 .shared-range > .filter-result { min-height: 16px; }
 [hidden] { display: none !important; }
@@ -285,11 +294,14 @@ main { width: min(1480px, 100%); margin: 0 auto; padding: 24px; }
 .metric-card[data-quality="unverified"] .quality-badge { background: #edf1f2; color: #60717a; }
 
 .panel { margin-top: 16px; overflow: hidden; }
-.sampling-form { min-height: 74px; padding: 13px 16px; display: grid; grid-template-columns: minmax(180px, 1fr) auto minmax(220px, auto) auto minmax(130px, auto); align-items: center; gap: 14px; }
+.sampling-form { display: grid; grid-template-columns: auto minmax(215px, auto) auto; align-items: center; gap: 7px 10px; }
 .sampling-form label { color: var(--muted); font-size: 11px; font-weight: 750; }
 .sampling-form select, .custom-filter input { border: 1px solid #b8c6cc; border-radius: 8px; background: #fff; color: var(--ink); }
 .sampling-form select { height: 38px; padding: 0 34px 0 10px; font-size: 12px; }
 .sampling-result { color: var(--success); font-size: 10px; font-weight: 750; }
+.sampling-compact { justify-self: end; }
+.sampling-compact .sampling-result { grid-column: 2; }
+.sampling-compact small { grid-column: 3; color: var(--muted); font-size: 9px; white-space: nowrap; }
 .sampling-result[data-error="true"], .filter-result[data-error="true"], .export-status[data-error="true"] { color: var(--danger); }
 .sampling-note { min-height: 39px; padding: 10px 16px; border-top: 1px solid var(--line); background: var(--surface-soft); color: var(--muted); font-size: 11px; }
 .sampling-note strong { margin-right: 8px; color: var(--ink); }
@@ -418,11 +430,10 @@ footer { width: min(1480px, 100%); min-height: 48px; margin: 0 auto; padding: 0 
   .topbar { grid-template-columns: auto 1fr; gap: 16px; padding: 12px 20px; }
   .primary-nav { grid-column: 1 / -1; grid-row: 2; width: 100%; justify-content: center; }
   .topbar-meta { justify-self: end; }
-  .sampling-form { grid-template-columns: 1fr 1fr auto; }
-  .sampling-form > div { grid-column: 1 / -1; }
-  .sampling-result { grid-column: 1 / -1; }
   .shared-range { position: static; grid-template-columns: 1fr; }
   .shared-range .custom-filter, .shared-range > .filter-result { grid-column: auto; }
+  .sampling-compact { justify-self: stretch; grid-template-columns: auto minmax(200px, 1fr) auto; }
+  .range-picker { grid-column: auto; align-items: flex-start; flex-direction: column; }
   .report-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
@@ -441,7 +452,7 @@ footer { width: min(1480px, 100%); min-height: 48px; margin: 0 auto; padding: 0 
   .system-banner button { grid-column: 2; justify-self: start; }
   .process-strip { grid-template-columns: 1fr; gap: 4px; }
   .sampling-form { grid-template-columns: 1fr; }
-  .sampling-form > div, .sampling-result { grid-column: auto; }
+  .sampling-compact .sampling-result, .sampling-compact small { grid-column: auto; }
   .panel-header, .page-heading { flex-direction: column; }
   .chart-legend { width: 100%; justify-content: space-between; }
   .chart-actions { width: 100%; justify-content: flex-start; }

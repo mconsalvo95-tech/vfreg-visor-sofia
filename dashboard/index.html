@@ -43,17 +43,34 @@
   <main id="main-content">
     <section class="panel shared-range" aria-labelledby="shared-range-title">
       <div class="range-summary">
-        <p class="eyebrow">Período de trabajo</p>
-        <h2 id="shared-range-title">Un período para gráficos, historial y descargas</h2>
-        <strong id="active-range-label">Últimos 15 minutos</strong>
+        <p class="eyebrow">Controles del monitoreo</p>
+        <h2 id="shared-range-title">Lectura y período visualizado</h2>
+        <span>Configure cómo se registran y se consultan los datos.</span>
       </div>
-      <div class="preset-filters" aria-label="Períodos rápidos">
-        <button type="button" data-range-minutes="5">5 min</button>
-        <button type="button" data-range-minutes="15" data-active="true">15 min</button>
-        <button type="button" data-range-minutes="30">30 min</button>
-        <button type="button" data-range-minutes="60">1 hora</button>
-        <button type="button" id="workday-filter">Jornada actual</button>
-        <button type="button" id="custom-range-toggle" aria-expanded="false" aria-controls="history-filter-form">Personalizado</button>
+      <form class="sampling-form sampling-compact" id="sampling-form">
+        <label for="poll-interval">Registrar una lectura cada</label>
+        <select id="poll-interval" name="seconds">
+          <option value="0.5">0,5 segundos · prueba rápida</option>
+          <option value="1">1 segundo</option>
+          <option value="5">5 segundos</option>
+          <option value="15">15 segundos</option>
+          <option value="30">30 segundos</option>
+          <option value="60">1 minuto</option>
+        </select>
+        <button class="primary-button" id="sampling-save" type="submit">Aplicar</button>
+        <span class="sampling-result" id="sampling-result" role="status"></span>
+        <small id="daily-reading-estimate">-- lecturas/día</small>
+      </form>
+      <div class="range-picker">
+        <div class="range-current"><span>Mostrar datos de</span><strong id="active-range-label">Últimos 15 minutos</strong></div>
+        <div class="preset-filters" aria-label="Períodos rápidos">
+          <button type="button" data-range-minutes="5">5 min</button>
+          <button type="button" data-range-minutes="15" data-active="true">15 min</button>
+          <button type="button" data-range-minutes="30">30 min</button>
+          <button type="button" data-range-minutes="60">1 hora</button>
+          <button type="button" id="workday-filter">Jornada actual</button>
+          <button type="button" id="custom-range-toggle" aria-expanded="false" aria-controls="history-filter-form">Personalizado</button>
+        </div>
       </div>
       <form class="custom-filter" id="history-filter-form" hidden>
         <label for="history-from">Desde<input id="history-from" type="datetime-local" step="1" required></label>
@@ -123,24 +140,6 @@
           <div class="metric-value"><strong id="frequency">--</strong><span>Hz</span></div>
           <canvas class="metric-sparkline" id="frequency-sparkline" aria-label="Tendencia compacta de frecuencia"></canvas>
         </article>
-      </section>
-
-      <section class="panel sampling-section" aria-labelledby="sampling-title">
-        <form class="sampling-form" id="sampling-form">
-          <div><p class="eyebrow">Recolección de datos</p><h2 id="sampling-title">Intervalo de lectura</h2></div>
-          <label for="poll-interval">Leer el VFREG cada</label>
-          <select id="poll-interval" name="seconds">
-            <option value="0.5">0,5 segundos · prueba rápida</option>
-            <option value="1">1 segundo</option>
-            <option value="5">5 segundos</option>
-            <option value="15">15 segundos</option>
-            <option value="30">30 segundos</option>
-            <option value="60">1 minuto</option>
-          </select>
-          <button class="primary-button" id="sampling-save" type="submit">Aplicar</button>
-          <span class="sampling-result" id="sampling-result" role="status"></span>
-        </form>
-        <p class="sampling-note"><strong id="daily-reading-estimate">-- lecturas/día</strong> Los intervalos largos reducen datos, pero pueden omitir variaciones eléctricas breves.</p>
       </section>
 
       <section class="panel chart-section" aria-labelledby="live-chart-title">
