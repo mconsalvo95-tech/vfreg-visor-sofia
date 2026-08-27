@@ -114,14 +114,14 @@ Wireshark on the factory computer.
   custom scopes, CSV/XLSX format selection, a live download summary, and an
   XLSX workbook-content preview. The three live metric-card sparklines are now
   independent from that period: each always shows the latest 40 readings and
-  uses a simple fixed operator-facing label. History renders the complete
-  selected quick period in its scrollable table rather than only the newest 50
-  readings. The display-query ceiling is 10,000 rows; exports remain complete
-  when a larger custom range exceeds that UI ceiling. Period clicks supersede
-  automatic refresh requests, update the visible selection immediately, and
+  uses a simple fixed operator-facing label. History interprets 5/15/30/60
+  minutes as sampling intervals from the configured workday start to now. Each
+  row is a real stored reading: the first available reading in its aligned
+  interval. Trends and Reports keep independent period controls, and raw data
+  remains unchanged. Sampling clicks supersede automatic refresh requests and
   expose a loading state while the table changes. Rows and totals come from one
-  database snapshot so live inserts cannot make the UI counts disagree. The
-  complete suite passes 69 tests.
+  database snapshot so live inserts cannot make UI counts disagree. The
+  complete suite passes 70 tests.
 - The current-workday start is configured with
   `factory.production_start_time` and defaults to `06:00`.
 

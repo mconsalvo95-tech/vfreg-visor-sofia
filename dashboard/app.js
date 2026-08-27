@@ -72,6 +72,7 @@ const elements = {
   workdayFilter: document.querySelector("#workday-filter"),
   customRangeToggle: document.querySelector("#custom-range-toggle"),
   historyPeriodLabel: document.querySelector("#history-period-label"),
+  historySourceLabel: document.querySelector("#history-source-label"),
   historyViewFilterForm: document.querySelector("#history-view-filter-form"),
   historyViewFrom: document.querySelector("#history-view-from"),
   historyViewTo: document.querySelector("#history-view-to"),
@@ -87,6 +88,9 @@ const elements = {
 
 let currentReadings = [];
 let currentRangeCount = 0;
+let historyReadings = [];
+let historySampleMinutes = 15;
+let historySourceRange = { key: "workday" };
 let latestStatusData = null;
 let activeRange = { key: "15m", minutes: 15, label: "Últimos 15 minutos", rolling: true };
 let currentView = "live";
@@ -95,6 +99,7 @@ let reportFormat = "xlsx";
 let chartMode = "overview";
 let chartPoints = [];
 let rangeRequestId = 0;
+let historyRequestId = 0;
 
 function isNumeric(value) {
   return value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
@@ -319,7 +324,7 @@ function updateConnectionAndProcess(data, mode) {
   elements.processDetail.textContent = processCopy[1];
 }
 
-function renderReadings(readings) {
+function renderReadings(readings = historyReadings) {
   const filtered = readings.filter((reading) => {
     const mode = rowMode(reading);
     if (historyQuality === "alarm") return mode === "alarm";
@@ -327,9 +332,9 @@ function renderReadings(readings) {
     return true;
   });
   elements.recordCount.textContent = filtered.length.toLocaleString("es-AR");
-  elements.recordCountLabel.textContent = filtered.length === currentRangeCount
-    ? "lecturas del período"
-    : `de ${currentRangeCount.toLocaleString("es-AR")} lecturas del período`;
+  elements.recordCountLabel.textContent = filtered.length === readings.length
+    ? "muestras del período"
+    : `de ${readings.length.toLocaleString("es-AR")} muestras del período`;
   elements.recordsBody.replaceChildren();
   if (!filtered.length) {
     const row = document.createElement("tr");
@@ -370,10 +375,13 @@ function renderReadings(readings) {
 function renderHistory(readings, count, modeLabel) {
   currentReadings = readings || [];
   currentRangeCount = Number(count || 0);
-  elements.historyMode.textContent = modeLabel;
-  if (currentView === "history") renderReadings(currentReadings);
   if (currentView === "live") drawChart(currentReadings);
   updateReportSummary();
+}
+
+function renderSampledHistory(readings) {
+  historyReadings = readings || [];
+  if (currentView === "history") renderReadings(historyReadings);
 }
 
 function renderStatus(data) {
@@ -585,7 +593,10 @@ function setView(view) {
     drawChart(currentReadings);
     drawSparklines(latestStatusData?.readings || []);
   });
-  if (view === "history") window.requestAnimationFrame(() => renderReadings(currentReadings));
+  if (view === "history") {
+    window.requestAnimationFrame(() => renderReadings(historyReadings));
+    loadHistorySamples();
+  }
 }
 
 function localInputValue(date) {
@@ -631,8 +642,6 @@ function updateReportSummary() {
   elements.reportDownload.textContent = xlsx ? "Descargar XLSX" : "Descargar CSV";
   elements.exportPeriod.textContent = activeRange.label;
   elements.activeRangeLabel.textContent = activeRange.label;
-  elements.historyPeriodLabel.textContent = activeRange.label;
-  elements.historyMode.textContent = activeRange.label;
   elements.reportCount.textContent = currentRangeCount.toLocaleString("es-AR");
   elements.previewReadingCount.textContent = `${currentRangeCount.toLocaleString("es-AR")} filas del período seleccionado`;
   elements.reportFormat.textContent = xlsx ? "Excel + gráficos" : "CSV sin procesar";
@@ -651,15 +660,6 @@ function selectPresetButton() {
   document.querySelectorAll("[data-range-minutes]").forEach((button) => {
     button.dataset.active = String(activeRange.key === `${button.dataset.rangeMinutes}m`);
   });
-  document.querySelectorAll("[data-history-minutes]").forEach((button) => {
-    button.dataset.active = String(activeRange.key === `${button.dataset.historyMinutes}m`);
-  });
-  document.querySelectorAll("[data-history-workday]").forEach((button) => {
-    button.dataset.active = String(activeRange.key === "workday");
-  });
-  document.querySelectorAll("[data-history-custom]").forEach((button) => {
-    button.dataset.active = String(activeRange.key === "custom");
-  });
   elements.workdayFilter.dataset.active = String(activeRange.key === "workday");
   elements.customRangeToggle.dataset.active = String(activeRange.key === "custom");
   document.querySelectorAll("[data-report-scope]").forEach((button) => {
@@ -668,7 +668,7 @@ function selectPresetButton() {
 }
 
 function setRangeStatus(message, error = false) {
-  [elements.historyFilterResult, elements.historyViewFilterResult, elements.historyRangeResult].forEach((element) => {
+  [elements.historyFilterResult].forEach((element) => {
     element.dataset.error = String(error);
     element.textContent = message;
   });
@@ -683,9 +683,7 @@ async function loadActiveRange({ announce = true } = {}) {
     return;
   }
   updateExportLinks();
-  elements.recordsSection.dataset.loading = "true";
-  elements.recordsSection.setAttribute("aria-busy", "true");
-  setRangeStatus(announce ? "Cargando lecturas…" : "Actualizando lecturas…");
+  if (announce) setRangeStatus("Cargando período…");
   const query = new URLSearchParams({ limit: "10000" });
   if (from) query.set("from", from);
   if (to) query.set("to", to);
@@ -702,12 +700,119 @@ async function loadActiveRange({ announce = true } = {}) {
   } catch (error) {
     if (requestId !== rangeRequestId) return;
     setRangeStatus(error.message, true);
+  }
+}
+
+function currentWorkdayRange() {
+  const to = new Date();
+  const [hours, minutes] = productionStartTime().split(":").map(Number);
+  const from = new Date(to);
+  from.setHours(hours || 0, minutes || 0, 0, 0);
+  if (from > to) from.setDate(from.getDate() - 1);
+  return { from: localInputValue(from), to: localInputValue(to) };
+}
+
+function resolvedHistorySourceRange() {
+  if (historySourceRange.key === "custom") {
+    return { from: historySourceRange.from, to: historySourceRange.to };
+  }
+  return currentWorkdayRange();
+}
+
+function historyIntervalLabel(minutes = historySampleMinutes) {
+  return minutes === 60 ? "Cada hora" : `Cada ${minutes} minutos`;
+}
+
+function selectHistoryControls() {
+  elements.historyPeriodLabel.textContent = historyIntervalLabel();
+  const sourceLabel = historySourceRange.key === "custom"
+    ? "Rango personalizado"
+    : `Inicio de jornada · ${productionStartTime()}`;
+  elements.historySourceLabel.textContent = sourceLabel;
+  elements.historyMode.textContent = `${historyIntervalLabel()} · ${sourceLabel.toLowerCase()}`;
+  document.querySelectorAll("[data-history-minutes]").forEach((button) => {
+    button.dataset.active = String(Number(button.dataset.historyMinutes) === historySampleMinutes);
+  });
+  document.querySelectorAll("[data-history-workday]").forEach((button) => {
+    button.dataset.active = String(historySourceRange.key === "workday");
+  });
+  document.querySelectorAll("[data-history-custom]").forEach((button) => {
+    button.dataset.active = String(historySourceRange.key === "custom");
+  });
+}
+
+function setHistoryStatus(message, error = false) {
+  [elements.historyViewFilterResult, elements.historyRangeResult].forEach((element) => {
+    element.dataset.error = String(error);
+    element.textContent = message;
+  });
+}
+
+async function loadHistorySamples({ announce = true } = {}) {
+  const requestId = ++historyRequestId;
+  const { from, to } = resolvedHistorySourceRange();
+  const interval = historySampleMinutes;
+  if (!from || !to || new Date(from) > new Date(to)) {
+    setHistoryStatus("La fecha Desde debe ser anterior a Hasta", true);
+    return;
+  }
+  selectHistoryControls();
+  elements.recordsSection.dataset.loading = "true";
+  elements.recordsSection.setAttribute("aria-busy", "true");
+  setHistoryStatus(announce ? "Cargando muestras…" : "Actualizando muestras…");
+  const query = new URLSearchParams({
+    from,
+    to,
+    sample_minutes: String(interval)
+  });
+  try {
+    const response = await fetch(`/api/readings?${query.toString()}`, { cache: "no-store" });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+    if (requestId !== historyRequestId) return;
+    renderSampledHistory(result.readings || []);
+    const source = historySourceRange.key === "custom"
+      ? "en el rango personalizado"
+      : `desde las ${productionStartTime()}`;
+    setHistoryStatus(
+      `${Number(result.count || 0).toLocaleString("es-AR")} muestras · una cada ${interval === 60 ? "hora" : `${interval} minutos`} ${source}`
+    );
+  } catch (error) {
+    if (requestId !== historyRequestId) return;
+    setHistoryStatus(error.message, true);
   } finally {
-    if (requestId === rangeRequestId) {
+    if (requestId === historyRequestId) {
       elements.recordsSection.dataset.loading = "false";
       elements.recordsSection.setAttribute("aria-busy", "false");
     }
   }
+}
+
+function applyHistorySampling(minutes) {
+  historySampleMinutes = minutes;
+  selectHistoryControls();
+  loadHistorySamples();
+}
+
+function applyHistoryWorkday() {
+  historySourceRange = { key: "workday" };
+  elements.historyViewFilterForm.hidden = true;
+  selectHistoryControls();
+  loadHistorySamples();
+}
+
+function applyHistoryCustomRange(from, to) {
+  if (!from || !to) {
+    setHistoryStatus("Complete Desde y Hasta para aplicar el rango", true);
+    return;
+  }
+  if (new Date(from) > new Date(to)) {
+    setHistoryStatus("La fecha Desde debe ser anterior a Hasta", true);
+    return;
+  }
+  historySourceRange = { key: "custom", from, to };
+  selectHistoryControls();
+  loadHistorySamples();
 }
 
 function hideCustomRangeForms() {
@@ -840,6 +945,16 @@ function openCustomForm(form, fromElement, toElement) {
   fromElement.focus();
 }
 
+function openHistoryCustomForm() {
+  const opening = elements.historyViewFilterForm.hidden;
+  elements.historyViewFilterForm.hidden = !opening;
+  if (!opening) return;
+  const range = resolvedHistorySourceRange();
+  elements.historyViewFrom.value = range.from;
+  elements.historyViewTo.value = range.to;
+  elements.historyViewFrom.focus();
+}
+
 function setReportFormat(format) {
   reportFormat = format;
   document.querySelectorAll("[data-report-format]").forEach((button) => {
@@ -877,21 +992,21 @@ document.querySelectorAll("[data-range-minutes]").forEach((button) => {
   button.addEventListener("click", () => applyPreset(Number(button.dataset.rangeMinutes)));
 });
 document.querySelectorAll("[data-history-minutes]").forEach((button) => {
-  button.addEventListener("click", () => applyPreset(Number(button.dataset.historyMinutes)));
+  button.addEventListener("click", () => applyHistorySampling(Number(button.dataset.historyMinutes)));
 });
-document.querySelectorAll("[data-history-workday]").forEach((button) => button.addEventListener("click", applyWorkday));
+document.querySelectorAll("[data-history-workday]").forEach((button) => button.addEventListener("click", applyHistoryWorkday));
 document.querySelectorAll("[data-history-custom]").forEach((button) => {
-  button.addEventListener("click", () => openCustomForm(elements.historyViewFilterForm, elements.historyViewFrom, elements.historyViewTo));
+  button.addEventListener("click", openHistoryCustomForm);
 });
 elements.historyViewFilterForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  applyCustomRange(elements.historyViewFrom.value, elements.historyViewTo.value, elements.historyViewFilterResult);
+  applyHistoryCustomRange(elements.historyViewFrom.value, elements.historyViewTo.value);
 });
 elements.historyViewFilterClear.addEventListener("click", () => {
   elements.historyViewFrom.value = "";
   elements.historyViewTo.value = "";
   elements.historyViewFilterForm.hidden = true;
-  applyPreset(15);
+  applyHistoryWorkday();
 });
 document.querySelectorAll("[data-report-scope]").forEach((button) => {
   button.addEventListener("click", () => {
@@ -914,7 +1029,7 @@ document.querySelectorAll("[data-quality-filter]").forEach((button) => {
     document.querySelectorAll("[data-quality-filter]").forEach((candidate) => {
       candidate.dataset.active = String(candidate === button);
     });
-    renderReadings(currentReadings);
+    renderReadings(historyReadings);
   });
 });
 document.querySelectorAll("[data-chart-mode]").forEach((button) => {
@@ -947,10 +1062,17 @@ window.addEventListener("resize", () => {
 updateClock();
 setView("live");
 selectPresetButton();
+selectHistoryControls();
 setReportFormat("xlsx");
 updateExportLinks();
 refresh();
 loadActiveRange();
 window.setInterval(updateClock, 1000);
 window.setInterval(refresh, 1000);
-window.setInterval(() => loadActiveRange({ announce: false }), 5000);
+window.setInterval(() => {
+  if (currentView === "history" && historySourceRange.key === "workday") {
+    loadHistorySamples({ announce: false });
+  } else if (currentView !== "history") {
+    loadActiveRange({ announce: false });
+  }
+}, 5000);

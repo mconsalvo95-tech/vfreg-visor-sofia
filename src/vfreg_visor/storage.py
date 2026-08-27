@@ -836,6 +836,53 @@ def fetch_recent_with_count(
     return [dict(row) for row in reversed(rows)], total
 
 
+def fetch_sampled_interval(
+    path: str,
+    interval_minutes: int,
+    start_time: str,
+    end_time: str,
+) -> tuple[list[dict[str, Any]], int]:
+    """Select the first real reading in each interval aligned to start_time."""
+    interval_seconds = int(interval_minutes) * 60
+    if interval_seconds <= 0:
+        raise ValueError("interval_minutes must be positive")
+    init_sqlite(path)
+    columns = ",".join(["id"] + CSV_FIELDS)
+    where, parameters = _measurement_filter(start_time, end_time)
+    with closing(connect_sqlite(path)) as con:
+        con.row_factory = sqlite3.Row
+        con.execute("BEGIN")
+        source_count = int(
+            con.execute(
+                f"SELECT COUNT(*) FROM measurements{where}", parameters
+            ).fetchone()[0]
+        )
+        rows = con.execute(
+            f"""
+            WITH bucketed AS (
+                SELECT {columns},
+                    CAST((unixepoch(timestamp) - unixepoch(?)) / ? AS INTEGER)
+                    AS sample_bucket
+                FROM measurements
+                {where}
+            ), ranked AS (
+                SELECT *, ROW_NUMBER() OVER (
+                    PARTITION BY sample_bucket ORDER BY timestamp ASC, id ASC
+                ) AS sample_rank
+                FROM bucketed
+            )
+            SELECT {columns}
+            FROM ranked
+            WHERE sample_rank = 1
+            ORDER BY id ASC
+            LIMIT 10000
+            """,
+            (start_time, interval_seconds, *parameters),
+        ).fetchall()
+        con.rollback()
+    return [dict(row) for row in rows], source_count
+
+
 def fetch_summary(
     path: str,
     start_time: str | None = None,

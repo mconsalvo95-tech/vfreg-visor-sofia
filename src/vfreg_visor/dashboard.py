@@ -22,6 +22,7 @@ from .storage import (
     fetch_events,
     fetch_recent,
     fetch_recent_with_count,
+    fetch_sampled_interval,
     fetch_summary,
 )
 
@@ -197,6 +198,39 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 start_time, end_time = parse_time_range(query)
             except ValueError as error:
                 self.send_error_json(HTTPStatus.BAD_REQUEST, str(error))
+                return
+            sample_minutes_raw = query.get("sample_minutes", [None])[0]
+            if sample_minutes_raw is not None:
+                try:
+                    sample_minutes = int(sample_minutes_raw)
+                except ValueError:
+                    self.send_error_json(
+                        HTTPStatus.BAD_REQUEST, "sample_minutes must be 5, 15, 30, or 60"
+                    )
+                    return
+                if sample_minutes not in (5, 15, 30, 60):
+                    self.send_error_json(
+                        HTTPStatus.BAD_REQUEST, "sample_minutes must be 5, 15, 30, or 60"
+                    )
+                    return
+                if not start_time or not end_time:
+                    self.send_error_json(
+                        HTTPStatus.BAD_REQUEST, "sampled history requires from and to"
+                    )
+                    return
+                readings, source_count = fetch_sampled_interval(
+                    cfg["output_sqlite"], sample_minutes, start_time, end_time
+                )
+                self.send_json(
+                    {
+                        "readings": readings,
+                        "count": len(readings),
+                        "source_count": source_count,
+                        "sample_minutes": sample_minutes,
+                        "from": start_time,
+                        "to": end_time,
+                    }
+                )
                 return
             readings, count = fetch_recent_with_count(
                 cfg["output_sqlite"], limit, start_time, end_time

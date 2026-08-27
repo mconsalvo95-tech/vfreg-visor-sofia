@@ -65,6 +65,7 @@ from vfreg_visor.storage import (  # noqa: E402
     export_csv,
     fetch_recent,
     fetch_recent_with_count,
+    fetch_sampled_interval,
     fetch_summary,
     init_sqlite,
     insert_measurements,
@@ -647,6 +648,25 @@ class StorageTests(unittest.TestCase):
             rows, count = fetch_recent_with_count(sqlite_path, 2)
             self.assertEqual(count, 3)
             self.assertEqual([row["sequence"] for row in rows], [2, 3])
+
+    def test_history_sampling_uses_first_real_reading_in_each_workday_interval(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            sqlite_path = os.path.join(directory, "readings.sqlite")
+            start = datetime.fromisoformat("2026-08-21T06:00:00-03:00")
+            for sequence in range(15):
+                timestamp = (start + timedelta(minutes=sequence)).isoformat()
+                append_sqlite(
+                    sqlite_path,
+                    Measurement(timestamp, "test", sequence, 35, 340, 202),
+                )
+            rows, source_count = fetch_sampled_interval(
+                sqlite_path,
+                5,
+                start.isoformat(),
+                (start + timedelta(minutes=14, seconds=59)).isoformat(),
+            )
+            self.assertEqual(source_count, 15)
+            self.assertEqual([row["sequence"] for row in rows], [0, 5, 10])
 
 
 class StatusTests(unittest.TestCase):

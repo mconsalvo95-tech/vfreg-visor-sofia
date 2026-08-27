@@ -61,14 +61,14 @@ release.
   **Excel + charts** reveals a truthful workbook-content preview.
 - Decoupled the three card sparklines from the selected Trends period. They now
   always show the latest 40 live readings with a simple operator-facing label.
-- History now renders every reading returned for the selected period instead
-  of silently showing only the newest 50. Quick rolling periods remain live,
-  while an explicit message identifies exceptionally large truncated views.
-- History period selections now respond immediately, show a visible loading
-  state, and supersede any automatic refresh already in progress so a click
-  cannot be silently ignored. Hidden History rows are no longer rebuilt while
-  the operator is using another section.
-- History rows and their total are now read from the same SQLite snapshot,
+- History now treats 5/15/30/60 minutes as sampling intervals across the
+  current workday, selecting the first real stored reading in each aligned
+  interval instead of showing second-by-second rows from a recent-time window.
+- History sampling selections respond immediately, show a visible loading
+  state, and supersede any automatic refresh already in progress. Trends and
+  Reports retain their independent period behavior, and raw readings remain
+  unchanged for exports and investigation.
+- History source rows and their total are now read from the same SQLite snapshot,
   preventing live inserts from producing a misleading one-row truncation
   message while the simulator or factory collector is active.
 

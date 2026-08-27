@@ -47,12 +47,15 @@ class Phase6CInteractionTests(unittest.TestCase):
         self.assertIn("Registrar una lectura cada", self.html)
         self.assertIn("Mostrar datos de", self.html)
 
-    def test_range_drives_chart_table_counts_and_filtered_exports(self) -> None:
+    def test_trend_range_and_history_sampling_are_independent(self) -> None:
         self.assertIn("loadActiveRange", self.javascript)
         self.assertIn("renderHistory(result.readings", self.javascript)
         self.assertIn("drawChart(currentReadings)", self.javascript)
         self.assertIn("elements.reportDownload.href", self.javascript)
         self.assertIn('"/api/export.xlsx" : "/api/export.csv"', self.javascript)
+        self.assertIn("loadHistorySamples", self.javascript)
+        self.assertIn("renderSampledHistory", self.javascript)
+        self.assertIn("sample_minutes", self.javascript)
         self.assertIn("elements.recordCount.textContent", self.javascript)
 
     def test_quality_filter_is_presentational_and_historical_export_is_separate(self) -> None:
@@ -101,16 +104,20 @@ class Phase6CInteractionTests(unittest.TestCase):
         render_history = self.javascript.split("function renderHistory", 1)[1].split("function renderStatus", 1)[0]
         self.assertNotIn("drawSparklines", render_history)
 
-    def test_history_table_displays_the_complete_selected_quick_period(self) -> None:
-        render_readings = self.javascript.split("function renderReadings", 1)[1].split("function renderHistory", 1)[0]
-        self.assertNotIn("slice(-50)", render_readings)
-        self.assertIn("[...filtered].reverse()", render_readings)
-        self.assertIn('new URLSearchParams({ limit: "10000" })', self.javascript)
+    def test_history_buttons_sample_from_workday_start_instead_of_filtering_recent_minutes(self) -> None:
+        self.assertIn("Intervalo de muestra", self.html)
+        self.assertIn('id="history-source-label"', self.html)
+        self.assertIn("function applyHistorySampling", self.javascript)
+        self.assertIn("function currentWorkdayRange", self.javascript)
+        self.assertIn("sample_minutes: String(interval)", self.javascript)
+        history_listener = self.javascript.split('document.querySelectorAll("[data-history-minutes]")', 2)[2]
+        self.assertIn("applyHistorySampling", history_listener)
+        self.assertNotIn("applyPreset", history_listener.split("});", 1)[0])
 
     def test_history_period_clicks_cannot_be_swallowed_by_background_refresh(self) -> None:
         self.assertIn('id="history-range-result"', self.html)
-        self.assertIn("const requestId = ++rangeRequestId", self.javascript)
-        self.assertIn("if (requestId !== rangeRequestId) return", self.javascript)
+        self.assertIn("const requestId = ++historyRequestId", self.javascript)
+        self.assertIn("if (requestId !== historyRequestId) return", self.javascript)
         self.assertNotIn("rangeRefreshBusy", self.javascript)
         self.assertIn('elements.recordsSection.setAttribute("aria-busy", "true")', self.javascript)
 

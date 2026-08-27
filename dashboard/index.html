@@ -182,12 +182,17 @@
 
       <section class="panel history-controls" aria-label="Período y calidad de las lecturas">
         <div class="history-period-control">
-          <div><span class="control-label">Período</span><strong id="history-period-label">Últimos 15 minutos</strong></div>
-          <div class="preset-filters" aria-label="Cambiar período del historial">
+          <div><span class="control-label">Intervalo de muestra</span><strong id="history-period-label">Cada 15 minutos</strong></div>
+          <div class="preset-filters" aria-label="Cambiar intervalo de muestra del historial">
             <button type="button" data-history-minutes="5">5 min</button>
             <button type="button" data-history-minutes="15" data-active="true">15 min</button>
             <button type="button" data-history-minutes="30">30 min</button>
             <button type="button" data-history-minutes="60">1 hora</button>
+          </div>
+        </div>
+        <div class="history-period-control history-source-control">
+          <div><span class="control-label">Datos desde</span><strong id="history-source-label">Inicio de jornada</strong></div>
+          <div class="preset-filters" aria-label="Cambiar origen del historial">
             <button type="button" data-history-workday>Jornada actual</button>
             <button type="button" data-history-custom>Personalizado</button>
           </div>
@@ -206,7 +211,7 @@
           <button type="button" data-quality-filter="alarm">Fuera de rango</button>
         </div>
         <div class="filter-feedback">
-          <strong id="history-mode">Últimos 15 minutos</strong>
+          <strong id="history-mode">Cada 15 minutos desde el inicio de jornada</strong>
           <span id="history-range-result" role="status">Cargando lecturas…</span>
         </div>
       </section>
