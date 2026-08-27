@@ -60,8 +60,7 @@ release.
   selection once again updates a visible download summary, and selecting
   **Excel + charts** reveals a truthful workbook-content preview.
 - Decoupled the three card sparklines from the selected Trends period. They now
-  always show the latest 40 live readings, with a dynamic label that translates
-  the configured recording interval into approximate time coverage.
+  always show the latest 40 live readings with a simple operator-facing label.
 
 ## 0.1.0-pilot-success — 2026-08-24
 

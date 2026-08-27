@@ -96,8 +96,8 @@ class Phase6CInteractionTests(unittest.TestCase):
 
     def test_card_sparklines_use_latest_live_readings_not_selected_range(self) -> None:
         self.assertEqual(self.html.count('class="sparkline-window"'), 3)
+        self.assertEqual(self.html.count("Últimas 40 lecturas"), 3)
         self.assertIn("drawSparklines(data.readings || [])", self.javascript)
-        self.assertIn("Últimas 40 lecturas", self.javascript)
         render_history = self.javascript.split("function renderHistory", 1)[1].split("function renderStatus", 1)[0]
         self.assertNotIn("drawSparklines", render_history)
 
