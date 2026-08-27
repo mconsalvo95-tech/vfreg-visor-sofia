@@ -107,6 +107,13 @@ class Phase6CInteractionTests(unittest.TestCase):
         self.assertIn("[...filtered].reverse()", render_readings)
         self.assertIn('new URLSearchParams({ limit: "10000" })', self.javascript)
 
+    def test_history_period_clicks_cannot_be_swallowed_by_background_refresh(self) -> None:
+        self.assertIn('id="history-range-result"', self.html)
+        self.assertIn("const requestId = ++rangeRequestId", self.javascript)
+        self.assertIn("if (requestId !== rangeRequestId) return", self.javascript)
+        self.assertNotIn("rangeRefreshBusy", self.javascript)
+        self.assertIn('elements.recordsSection.setAttribute("aria-busy", "true")', self.javascript)
+
     def test_example_configuration_defines_six_am_workday(self) -> None:
         config = json.loads((PROJECT_ROOT / "config.example.json").read_text(encoding="utf-8"))
         self.assertEqual(config["factory"]["production_start_time"], "06:00")

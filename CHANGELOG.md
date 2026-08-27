@@ -64,6 +64,13 @@ release.
 - History now renders every reading returned for the selected period instead
   of silently showing only the newest 50. Quick rolling periods remain live,
   while an explicit message identifies exceptionally large truncated views.
+- History period selections now respond immediately, show a visible loading
+  state, and supersede any automatic refresh already in progress so a click
+  cannot be silently ignored. Hidden History rows are no longer rebuilt while
+  the operator is using another section.
+- History rows and their total are now read from the same SQLite snapshot,
+  preventing live inserts from producing a misleading one-row truncation
+  message while the simulator or factory collector is active.
 
 ## 0.1.0-pilot-success — 2026-08-24
 

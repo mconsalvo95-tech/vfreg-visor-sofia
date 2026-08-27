@@ -392,6 +392,7 @@ main { width: min(1480px, 100%); margin: 0 auto; padding: 24px; }
 .quality-filters { width: fit-content; padding: 3px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-soft); }
 
 .table-wrap { max-height: 570px; overflow: auto; }
+.records-section[data-loading="true"] .table-wrap { opacity: 0.55; }
 table { width: 100%; border-collapse: collapse; font-size: 12px; }
 th { position: sticky; top: 0; z-index: 2; height: 36px; padding: 8px 12px; text-align: left; background: #f4f7f8; color: var(--muted); font-size: 9px; letter-spacing: 0.035em; text-transform: uppercase; box-shadow: 0 1px 0 var(--line); }
 td { height: 38px; padding: 8px 12px; border-top: 1px solid #edf1f2; white-space: nowrap; font-variant-numeric: tabular-nums; }

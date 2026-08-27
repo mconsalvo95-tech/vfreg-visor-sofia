@@ -117,8 +117,11 @@ Wireshark on the factory computer.
   uses a simple fixed operator-facing label. History renders the complete
   selected quick period in its scrollable table rather than only the newest 50
   readings. The display-query ceiling is 10,000 rows; exports remain complete
-  when a larger custom range exceeds that UI ceiling. The complete suite passes
-  67 tests.
+  when a larger custom range exceeds that UI ceiling. Period clicks supersede
+  automatic refresh requests, update the visible selection immediately, and
+  expose a loading state while the table changes. Rows and totals come from one
+  database snapshot so live inserts cannot make the UI counts disagree. The
+  complete suite passes 69 tests.
 - The current-workday start is configured with
   `factory.production_start_time` and defaults to `06:00`.
 

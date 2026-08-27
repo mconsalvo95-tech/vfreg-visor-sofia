@@ -21,6 +21,7 @@ from .storage import (
     export_csv,
     fetch_events,
     fetch_recent,
+    fetch_recent_with_count,
     fetch_summary,
 )
 
@@ -197,14 +198,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
             except ValueError as error:
                 self.send_error_json(HTTPStatus.BAD_REQUEST, str(error))
                 return
+            readings, count = fetch_recent_with_count(
+                cfg["output_sqlite"], limit, start_time, end_time
+            )
             self.send_json(
                 {
-                    "readings": fetch_recent(
-                        cfg["output_sqlite"], limit, start_time, end_time
-                    ),
-                    "count": fetch_summary(
-                        cfg["output_sqlite"], start_time, end_time
-                    )["count"],
+                    "readings": readings,
+                    "count": count,
                     "from": start_time,
                     "to": end_time,
                 }

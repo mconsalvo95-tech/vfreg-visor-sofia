@@ -77,6 +77,8 @@ const elements = {
   historyViewTo: document.querySelector("#history-view-to"),
   historyViewFilterClear: document.querySelector("#history-view-filter-clear"),
   historyViewFilterResult: document.querySelector("#history-view-filter-result"),
+  historyRangeResult: document.querySelector("#history-range-result"),
+  recordsSection: document.querySelector(".records-section"),
   reportCustomForm: document.querySelector("#report-custom-form"),
   reportFrom: document.querySelector("#report-from"),
   reportTo: document.querySelector("#report-to"),
@@ -92,7 +94,7 @@ let historyQuality = "all";
 let reportFormat = "xlsx";
 let chartMode = "overview";
 let chartPoints = [];
-let rangeRefreshBusy = false;
+let rangeRequestId = 0;
 
 function isNumeric(value) {
   return value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
@@ -369,8 +371,8 @@ function renderHistory(readings, count, modeLabel) {
   currentReadings = readings || [];
   currentRangeCount = Number(count || 0);
   elements.historyMode.textContent = modeLabel;
-  renderReadings(currentReadings);
-  drawChart(currentReadings);
+  if (currentView === "history") renderReadings(currentReadings);
+  if (currentView === "live") drawChart(currentReadings);
   updateReportSummary();
 }
 
@@ -583,6 +585,7 @@ function setView(view) {
     drawChart(currentReadings);
     drawSparklines(latestStatusData?.readings || []);
   });
+  if (view === "history") window.requestAnimationFrame(() => renderReadings(currentReadings));
 }
 
 function localInputValue(date) {
@@ -629,6 +632,7 @@ function updateReportSummary() {
   elements.exportPeriod.textContent = activeRange.label;
   elements.activeRangeLabel.textContent = activeRange.label;
   elements.historyPeriodLabel.textContent = activeRange.label;
+  elements.historyMode.textContent = activeRange.label;
   elements.reportCount.textContent = currentRangeCount.toLocaleString("es-AR");
   elements.previewReadingCount.textContent = `${currentRangeCount.toLocaleString("es-AR")} filas del período seleccionado`;
   elements.reportFormat.textContent = xlsx ? "Excel + gráficos" : "CSV sin procesar";
@@ -664,22 +668,24 @@ function selectPresetButton() {
 }
 
 function setRangeStatus(message, error = false) {
-  [elements.historyFilterResult, elements.historyViewFilterResult].forEach((element) => {
+  [elements.historyFilterResult, elements.historyViewFilterResult, elements.historyRangeResult].forEach((element) => {
     element.dataset.error = String(error);
     element.textContent = message;
   });
 }
 
 async function loadActiveRange({ announce = true } = {}) {
-  if (rangeRefreshBusy) return;
+  const requestId = ++rangeRequestId;
+  const rangeLabel = activeRange.label;
   const { from, to } = resolvedRange();
   if (from && to && new Date(from) > new Date(to)) {
     setRangeStatus("La fecha Desde debe ser anterior a Hasta", true);
     return;
   }
-  rangeRefreshBusy = true;
   updateExportLinks();
-  if (announce) setRangeStatus("Cargando período…");
+  elements.recordsSection.dataset.loading = "true";
+  elements.recordsSection.setAttribute("aria-busy", "true");
+  setRangeStatus(announce ? "Cargando lecturas…" : "Actualizando lecturas…");
   const query = new URLSearchParams({ limit: "10000" });
   if (from) query.set("from", from);
   if (to) query.set("to", to);
@@ -687,15 +693,20 @@ async function loadActiveRange({ announce = true } = {}) {
     const response = await fetch(`/api/readings?${query.toString()}`, { cache: "no-store" });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
-    renderHistory(result.readings || [], result.count || 0, activeRange.label);
+    if (requestId !== rangeRequestId) return;
+    renderHistory(result.readings || [], result.count || 0, rangeLabel);
     const hiddenCount = Math.max(0, Number(result.count || 0) - (result.readings || []).length);
     setRangeStatus(hiddenCount
       ? `${Number(result.count).toLocaleString("es-AR")} coincidencias; se muestran las últimas ${(result.readings || []).length.toLocaleString("es-AR")}`
-      : `${Number(result.count || 0).toLocaleString("es-AR")} lecturas en ${activeRange.label.toLowerCase()}`);
+      : `${Number(result.count || 0).toLocaleString("es-AR")} lecturas en ${rangeLabel.toLowerCase()}`);
   } catch (error) {
+    if (requestId !== rangeRequestId) return;
     setRangeStatus(error.message, true);
   } finally {
-    rangeRefreshBusy = false;
+    if (requestId === rangeRequestId) {
+      elements.recordsSection.dataset.loading = "false";
+      elements.recordsSection.setAttribute("aria-busy", "false");
+    }
   }
 }
 

@@ -809,6 +809,33 @@ def fetch_recent(
     return [dict(row) for row in reversed(rows)]
 
 
+def fetch_recent_with_count(
+    path: str,
+    limit: int = 180,
+    start_time: str | None = None,
+    end_time: str | None = None,
+) -> tuple[list[dict[str, Any]], int]:
+    """Return rows and their total from one SQLite read snapshot."""
+    init_sqlite(path)
+    safe_limit = max(1, min(int(limit), 10000))
+    columns = ",".join(["id"] + CSV_FIELDS)
+    where, parameters = _measurement_filter(start_time, end_time)
+    with closing(connect_sqlite(path)) as con:
+        con.row_factory = sqlite3.Row
+        con.execute("BEGIN")
+        total = int(
+            con.execute(
+                f"SELECT COUNT(*) FROM measurements{where}", parameters
+            ).fetchone()[0]
+        )
+        rows = con.execute(
+            f"SELECT {columns} FROM measurements{where} ORDER BY id DESC LIMIT ?",
+            (*parameters, safe_limit),
+        ).fetchall()
+        con.rollback()
+    return [dict(row) for row in reversed(rows)], total
+
+
 def fetch_summary(
     path: str,
     start_time: str | None = None,
