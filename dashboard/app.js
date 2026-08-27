@@ -340,7 +340,8 @@ function renderReadings(readings) {
     return;
   }
 
-  filtered.slice(-50).reverse().forEach((reading) => {
+  const fragment = document.createDocumentFragment();
+  [...filtered].reverse().forEach((reading) => {
     const row = document.createElement("tr");
     const mode = rowMode(reading);
     const timestamp = timestampParts(reading.timestamp);
@@ -359,9 +360,9 @@ function renderReadings(readings) {
       if (index === 5) cell.className = "table-status";
       row.appendChild(cell);
     });
-    elements.recordsBody.appendChild(row);
+    fragment.appendChild(row);
   });
-
+  elements.recordsBody.appendChild(fragment);
 }
 
 function renderHistory(readings, count, modeLabel) {
@@ -679,7 +680,7 @@ async function loadActiveRange({ announce = true } = {}) {
   rangeRefreshBusy = true;
   updateExportLinks();
   if (announce) setRangeStatus("Cargando período…");
-  const query = new URLSearchParams({ limit: "5000" });
+  const query = new URLSearchParams({ limit: "10000" });
   if (from) query.set("from", from);
   if (to) query.set("to", to);
   try {
@@ -689,7 +690,7 @@ async function loadActiveRange({ announce = true } = {}) {
     renderHistory(result.readings || [], result.count || 0, activeRange.label);
     const hiddenCount = Math.max(0, Number(result.count || 0) - (result.readings || []).length);
     setRangeStatus(hiddenCount
-      ? `${Number(result.count).toLocaleString("es-AR")} coincidencias; se muestran las últimas 5.000`
+      ? `${Number(result.count).toLocaleString("es-AR")} coincidencias; se muestran las últimas ${(result.readings || []).length.toLocaleString("es-AR")}`
       : `${Number(result.count || 0).toLocaleString("es-AR")} lecturas en ${activeRange.label.toLowerCase()}`);
   } catch (error) {
     setRangeStatus(error.message, true);

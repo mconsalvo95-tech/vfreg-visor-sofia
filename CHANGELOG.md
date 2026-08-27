@@ -61,6 +61,9 @@ release.
   **Excel + charts** reveals a truthful workbook-content preview.
 - Decoupled the three card sparklines from the selected Trends period. They now
   always show the latest 40 live readings with a simple operator-facing label.
+- History now renders every reading returned for the selected period instead
+  of silently showing only the newest 50. Quick rolling periods remain live,
+  while an explicit message identifies exceptionally large truncated views.
 
 ## 0.1.0-pilot-success — 2026-08-24
 

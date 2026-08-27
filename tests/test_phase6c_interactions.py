@@ -101,6 +101,12 @@ class Phase6CInteractionTests(unittest.TestCase):
         render_history = self.javascript.split("function renderHistory", 1)[1].split("function renderStatus", 1)[0]
         self.assertNotIn("drawSparklines", render_history)
 
+    def test_history_table_displays_the_complete_selected_quick_period(self) -> None:
+        render_readings = self.javascript.split("function renderReadings", 1)[1].split("function renderHistory", 1)[0]
+        self.assertNotIn("slice(-50)", render_readings)
+        self.assertIn("[...filtered].reverse()", render_readings)
+        self.assertIn('new URLSearchParams({ limit: "10000" })', self.javascript)
+
     def test_example_configuration_defines_six_am_workday(self) -> None:
         config = json.loads((PROJECT_ROOT / "config.example.json").read_text(encoding="utf-8"))
         self.assertEqual(config["factory"]["production_start_time"], "06:00")

@@ -797,7 +797,7 @@ def fetch_recent(
     end_time: str | None = None,
 ) -> list[dict[str, Any]]:
     init_sqlite(path)
-    safe_limit = max(1, min(int(limit), 5000))
+    safe_limit = max(1, min(int(limit), 10000))
     columns = ",".join(["id"] + CSV_FIELDS)
     where, parameters = _measurement_filter(start_time, end_time)
     with closing(connect_sqlite(path)) as con:

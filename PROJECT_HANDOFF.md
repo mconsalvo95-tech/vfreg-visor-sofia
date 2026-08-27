@@ -114,7 +114,11 @@ Wireshark on the factory computer.
   custom scopes, CSV/XLSX format selection, a live download summary, and an
   XLSX workbook-content preview. The three live metric-card sparklines are now
   independent from that period: each always shows the latest 40 readings and
-  uses a simple fixed operator-facing label. The complete suite passes 66 tests.
+  uses a simple fixed operator-facing label. History renders the complete
+  selected quick period in its scrollable table rather than only the newest 50
+  readings. The display-query ceiling is 10,000 rows; exports remain complete
+  when a larger custom range exceeds that UI ceiling. The complete suite passes
+  67 tests.
 - The current-workday start is configured with
   `factory.production_start_time` and defaults to `06:00`.
 
