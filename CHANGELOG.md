@@ -49,10 +49,10 @@ release.
   value tooltips, sticky history headers, table-only quality filters, and a
   separate historical CSV through the selected cutoff. Raw stored readings,
   including zero values and gaps, remain unchanged.
-- Consolidated the operator-controlled recording interval and displayed time
-  range into one clearly separated control bar above the three application
-  views. The bar no longer remains pinned while scrolling, and the duplicate
-  interval panel was removed from Live Monitoring.
+- Kept the operator-controlled recording interval in a compact top control and
+  moved the displayed time range into the Live Monitoring trends panel that it
+  directly controls. The controls no longer remain pinned while scrolling, and
+  Report's **Change period** action returns directly to the chart selector.
 
 ## 0.1.0-pilot-success — 2026-08-24
 

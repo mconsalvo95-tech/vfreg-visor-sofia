@@ -31,12 +31,15 @@ class Phase6CInteractionTests(unittest.TestCase):
         self.assertIn("function resolvedRange", self.javascript)
         self.assertIn("production_start_time", self.javascript)
 
-    def test_operator_intervals_share_one_non_pinned_control_bar(self) -> None:
-        control_start = self.html.index('class="panel shared-range"')
+    def test_recording_interval_and_chart_period_are_placed_by_purpose(self) -> None:
+        control_start = self.html.index('class="panel operator-controls"')
         live_start = self.html.index('id="view-live"')
         sampling_start = self.html.index('id="sampling-form"')
         self.assertLess(control_start, sampling_start)
         self.assertLess(sampling_start, live_start)
+        chart_start = self.html.index('id="live-chart-title"')
+        range_start = self.html.index('class="shared-range"')
+        self.assertGreater(range_start, chart_start)
         shared_rule = self.styles.split(".shared-range {", 1)[1].split("}", 1)[0]
         self.assertNotIn("position: sticky", shared_rule)
         self.assertIn("Registrar una lectura cada", self.html)

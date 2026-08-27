@@ -164,7 +164,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .connection-pill[data-process="paused"] .connection-symbol::after { left: 14px; }
 
 main { width: min(1480px, 100%); margin: 0 auto; padding: 24px; }
-.shared-range {
+.operator-controls {
   margin-top: 0;
   padding: 13px 16px;
   display: grid;
@@ -176,19 +176,22 @@ main { width: min(1480px, 100%); margin: 0 auto; padding: 24px; }
 .range-summary { display: grid; gap: 2px; }
 .range-summary h2 { font-size: 14px; }
 .range-summary > span { color: var(--muted); font-size: 10px; }
+.shared-range {
+  padding: 10px 16px;
+  display: grid;
+  gap: 9px;
+  border-bottom: 1px solid var(--line);
+  background: #fbfcfc;
+}
 .range-picker {
-  grid-column: 1 / -1;
-  padding-top: 11px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  border-top: 1px solid var(--line);
 }
 .range-current { min-width: 190px; display: grid; gap: 2px; }
 .range-current span { color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
 .range-current strong { color: var(--brand); font-size: 11px; }
-.shared-range .custom-filter, .shared-range > .filter-result { grid-column: 1 / -1; }
 .shared-range > .filter-result { min-height: 16px; }
 [hidden] { display: none !important; }
 .app-view[hidden] { display: none; }
@@ -430,10 +433,9 @@ footer { width: min(1480px, 100%); min-height: 48px; margin: 0 auto; padding: 0 
   .topbar { grid-template-columns: auto 1fr; gap: 16px; padding: 12px 20px; }
   .primary-nav { grid-column: 1 / -1; grid-row: 2; width: 100%; justify-content: center; }
   .topbar-meta { justify-self: end; }
-  .shared-range { position: static; grid-template-columns: 1fr; }
-  .shared-range .custom-filter, .shared-range > .filter-result { grid-column: auto; }
+  .operator-controls { grid-template-columns: 1fr; }
   .sampling-compact { justify-self: stretch; grid-template-columns: auto minmax(200px, 1fr) auto; }
-  .range-picker { grid-column: auto; align-items: flex-start; flex-direction: column; }
+  .range-picker { align-items: flex-start; flex-direction: column; }
   .report-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 

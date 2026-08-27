@@ -41,11 +41,11 @@
   </header>
 
   <main id="main-content">
-    <section class="panel shared-range" aria-labelledby="shared-range-title">
+    <section class="panel operator-controls" aria-labelledby="operator-controls-title">
       <div class="range-summary">
         <p class="eyebrow">Controles del monitoreo</p>
-        <h2 id="shared-range-title">Lectura y período visualizado</h2>
-        <span>Configure cómo se registran y se consultan los datos.</span>
+        <h2 id="operator-controls-title">Intervalo de lectura</h2>
+        <span>Configure cada cuánto tiempo se registra un dato.</span>
       </div>
       <form class="sampling-form sampling-compact" id="sampling-form">
         <label for="poll-interval">Registrar una lectura cada</label>
@@ -61,24 +61,6 @@
         <span class="sampling-result" id="sampling-result" role="status"></span>
         <small id="daily-reading-estimate">-- lecturas/día</small>
       </form>
-      <div class="range-picker">
-        <div class="range-current"><span>Mostrar datos de</span><strong id="active-range-label">Últimos 15 minutos</strong></div>
-        <div class="preset-filters" aria-label="Períodos rápidos">
-          <button type="button" data-range-minutes="5">5 min</button>
-          <button type="button" data-range-minutes="15" data-active="true">15 min</button>
-          <button type="button" data-range-minutes="30">30 min</button>
-          <button type="button" data-range-minutes="60">1 hora</button>
-          <button type="button" id="workday-filter">Jornada actual</button>
-          <button type="button" id="custom-range-toggle" aria-expanded="false" aria-controls="history-filter-form">Personalizado</button>
-        </div>
-      </div>
-      <form class="custom-filter" id="history-filter-form" hidden>
-        <label for="history-from">Desde<input id="history-from" type="datetime-local" step="1" required></label>
-        <label for="history-to">Hasta<input id="history-to" type="datetime-local" step="1" required></label>
-        <button class="primary-button filter-apply" type="submit">Aplicar</button>
-        <button class="secondary-button filter-clear" id="history-filter-clear" type="button">Limpiar</button>
-      </form>
-      <span class="filter-result" id="history-filter-result" role="status">Cargando últimos 15 minutos…</span>
     </section>
 
     <section class="app-view is-active" id="view-live" data-view-panel="live">
@@ -155,6 +137,26 @@
             <label class="zoom-control" for="chart-zoom">Zoom <input id="chart-zoom" type="range" min="1" max="4" step="1" value="1"></label>
             <button class="secondary-button chart-reset" id="chart-reset" type="button">Restablecer</button>
           </div>
+        </div>
+        <div class="shared-range" aria-label="Período mostrado en tendencias, historial y descargas">
+          <div class="range-picker">
+            <div class="range-current"><span>Mostrar datos de</span><strong id="active-range-label">Últimos 15 minutos</strong></div>
+            <div class="preset-filters" aria-label="Períodos rápidos">
+              <button type="button" data-range-minutes="5">5 min</button>
+              <button type="button" data-range-minutes="15" data-active="true">15 min</button>
+              <button type="button" data-range-minutes="30">30 min</button>
+              <button type="button" data-range-minutes="60">1 hora</button>
+              <button type="button" id="workday-filter">Jornada actual</button>
+              <button type="button" id="custom-range-toggle" aria-expanded="false" aria-controls="history-filter-form">Personalizado</button>
+            </div>
+          </div>
+          <form class="custom-filter" id="history-filter-form" hidden>
+            <label for="history-from">Desde<input id="history-from" type="datetime-local" step="1" required></label>
+            <label for="history-to">Hasta<input id="history-to" type="datetime-local" step="1" required></label>
+            <button class="primary-button filter-apply" type="submit">Aplicar</button>
+            <button class="secondary-button filter-clear" id="history-filter-clear" type="button">Limpiar</button>
+          </form>
+          <span class="filter-result" id="history-filter-result" role="status">Cargando últimos 15 minutos…</span>
         </div>
         <div class="chart-legend" aria-label="Referencias del gráfico">
           <span class="legend-voltage">Voltaje</span>

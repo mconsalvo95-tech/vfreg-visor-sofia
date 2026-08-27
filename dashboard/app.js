@@ -781,6 +781,7 @@ elements.customRangeToggle.addEventListener("click", () => {
   }
 });
 elements.focusRangeControls.addEventListener("click", () => {
+  setView("live");
   document.querySelector(".shared-range").scrollIntoView({ behavior: "smooth", block: "start" });
   elements.customRangeToggle.focus();
 });
