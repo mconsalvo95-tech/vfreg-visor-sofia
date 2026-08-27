@@ -235,8 +235,9 @@ management exports without changing collection, storage, or device behavior.
 
 ### Phase 6C — Live charts and history interaction
 
-- [x] Use one shared time-range selector for charts, Recent Readings, the
-  matching-record count, and filtered export.
+- [x] Use one synchronized selected time range for charts, Recent Readings,
+  the matching-record count, and filtered export, with controls available in
+  the Live trends, History, and Reports workflows where operators need them.
 - [x] Provide 5-minute, 15-minute, 30-minute, 1-hour, current-workday, and
   custom `Desde` / `Hasta` ranges.
 - [x] Define the current workday as the configurable production start time,

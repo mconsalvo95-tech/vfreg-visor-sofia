@@ -107,8 +107,12 @@ Wireshark on the factory computer.
 - Phase 6C adds one shared 5/15/30/60-minute, current-workday, or custom period
   for trends, history, counts, and filtered downloads. It also adds compact
   metric trends, overview/detail charts, zoom, exact-value tooltips, table-only
-  quality filters, a sticky table header, and a separate full-history-to-cutoff
-  CSV. These controls query stored data only and never mutate collection.
+  quality filters, a sticky table header, and a complete-history report scope.
+  These controls query stored data only and never mutate collection.
+- The synchronized period can now be changed directly from History or through
+  the guided Reports workflow. Reports provides workday, complete-history, and
+  custom scopes, CSV/XLSX format selection, a live download summary, and an
+  XLSX workbook-content preview. The complete suite passes 65 tests.
 - The current-workday start is configured with
   `factory.production_start_time` and defaults to `06:00`.
 

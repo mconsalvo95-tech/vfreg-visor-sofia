@@ -177,7 +177,25 @@
         <div class="page-count"><strong id="record-count">0</strong><span id="record-count-label">lecturas guardadas</span></div>
       </div>
 
-      <section class="panel history-controls" aria-label="Calidad de las lecturas">
+      <section class="panel history-controls" aria-label="Período y calidad de las lecturas">
+        <div class="history-period-control">
+          <div><span class="control-label">Período</span><strong id="history-period-label">Últimos 15 minutos</strong></div>
+          <div class="preset-filters" aria-label="Cambiar período del historial">
+            <button type="button" data-history-minutes="5">5 min</button>
+            <button type="button" data-history-minutes="15" data-active="true">15 min</button>
+            <button type="button" data-history-minutes="30">30 min</button>
+            <button type="button" data-history-minutes="60">1 hora</button>
+            <button type="button" data-history-workday>Jornada actual</button>
+            <button type="button" data-history-custom>Personalizado</button>
+          </div>
+        </div>
+        <form class="custom-filter" id="history-view-filter-form" hidden>
+          <label for="history-view-from">Desde<input id="history-view-from" type="datetime-local" step="1" required></label>
+          <label for="history-view-to">Hasta<input id="history-view-to" type="datetime-local" step="1" required></label>
+          <button class="primary-button" type="submit">Aplicar</button>
+          <button class="secondary-button" id="history-view-filter-clear" type="button">Limpiar</button>
+          <span class="filter-result" id="history-view-filter-result" role="status"></span>
+        </form>
         <div class="quality-filters" role="group" aria-label="Filtrar por calidad">
           <span>Calidad</span>
           <button type="button" data-quality-filter="all" data-active="true">Todas</button>
@@ -206,30 +224,74 @@
 
     <section class="app-view" id="view-reports" data-view-panel="reports" hidden>
       <div class="page-heading">
-        <div><p class="eyebrow">Descarga de datos</p><h1>Reportes</h1><p class="page-subtitle">Use el período elegido en Historial o descargue todo lo almacenado.</p></div>
+        <div><p class="eyebrow">Centro de descargas</p><h1>Crear un reporte</h1><p class="page-subtitle">Seleccione el período y luego el formato que necesita.</p></div>
       </div>
 
-      <section class="panel report-period">
-        <div><span>Período seleccionado</span><strong id="export-period">Todo el historial almacenado</strong></div>
-        <button class="secondary-button" type="button" id="focus-range-controls">Cambiar período</button>
+      <section class="report-builder" aria-label="Configurar reporte">
+        <div class="report-step">
+          <div class="step-heading"><span>1</span><div><strong>Seleccione el período</strong><small>Qué lecturas desea descargar</small></div></div>
+          <div class="scope-cards">
+            <button class="scope-card" type="button" data-report-scope="workday">
+              <span class="scope-icon" aria-hidden="true">06</span><strong>Jornada actual</strong><small>Desde las 06:00 hasta ahora</small><b>Datos de hoy</b>
+            </button>
+            <button class="scope-card" type="button" data-report-scope="history">
+              <span class="scope-icon" aria-hidden="true">∞</span><strong>Histórico completo</strong><small>Todos los datos almacenados</small><b>Sin fecha inicial</b>
+            </button>
+            <button class="scope-card" type="button" data-report-scope="custom">
+              <span class="scope-icon" aria-hidden="true">↔</span><strong>Período personalizado</strong><small>Elija fecha y hora de inicio y fin</small><b>Configurar período</b>
+            </button>
+          </div>
+          <form class="custom-filter report-custom-filter" id="report-custom-form" hidden>
+            <label for="report-from">Desde<input id="report-from" type="datetime-local" step="1" required></label>
+            <label for="report-to">Hasta<input id="report-to" type="datetime-local" step="1" required></label>
+            <button class="primary-button" type="submit">Aplicar período</button>
+            <span class="filter-result" id="report-custom-result" role="status"></span>
+          </form>
+        </div>
+
+        <div class="report-step">
+          <div class="step-heading"><span>2</span><div><strong>Seleccione el formato</strong><small>Cómo desea utilizar los datos</small></div></div>
+          <div class="format-cards">
+            <button class="format-card" id="csv-export" type="button" data-report-format="csv">
+              <span class="file-mark">CSV</span><span><strong>Datos sin procesar</strong><small>Fecha, hora y las tres mediciones.</small></span><b class="selection-mark" aria-hidden="true">✓</b>
+            </button>
+            <button class="format-card is-selected" id="xlsx-export" type="button" data-report-format="xlsx">
+              <span class="file-mark excel">XLSX</span><span><strong>Excel + gráficos</strong><small>Lecturas y tres gráficos separados para revisión.</small></span><b class="selection-mark" aria-hidden="true">✓</b>
+            </button>
+          </div>
+        </div>
+
+        <aside class="download-summary" aria-label="Resumen de descarga">
+          <p class="eyebrow">Resumen</p>
+          <h2 id="report-summary-title">Reporte del período seleccionado</h2>
+          <dl>
+            <div><dt>Período</dt><dd id="export-period">Últimos 15 minutos</dd></div>
+            <div><dt>Registros</dt><dd id="report-count">0</dd></div>
+            <div><dt>Formato</dt><dd id="report-format">Excel + gráficos</dd></div>
+            <div><dt>Contenido</dt><dd id="report-content">Lecturas + Gráficos</dd></div>
+          </dl>
+          <a class="download-button primary-button" id="report-download" href="/api/export.xlsx" download>Descargar XLSX</a>
+          <small>La descarga no pausa la recolección.</small>
+        </aside>
       </section>
 
-      <section class="report-grid" aria-label="Formatos de descarga">
-        <article class="report-card">
-          <span class="format-icon">CSV</span>
-          <div><h2>Datos sin procesar</h2><p>Tabla simple con las lecturas del período seleccionado.</p></div>
-          <a class="primary-button" id="csv-export" href="/api/export.csv" download>Descargar CSV</a>
-        </article>
-        <article class="report-card featured">
-          <span class="format-icon">XLSX</span>
-          <div><h2>Excel con gráficos</h2><p>Lecturas y gráficos separados para revisión administrativa.</p></div>
-          <a class="primary-button" id="xlsx-export" href="/api/export.xlsx" download>Descargar XLSX</a>
-        </article>
-        <article class="report-card historical-card">
-          <span class="format-icon">HIST</span>
-          <div><h2>Histórico completo</h2><p>CSV con todo lo almacenado hasta el final del período seleccionado. No aplica el filtro de calidad de la tabla.</p></div>
-          <a class="primary-button" id="historical-csv-export" href="/api/export.csv" download>Descargar histórico</a>
-        </article>
+      <section class="panel workbook-preview" id="workbook-preview" aria-labelledby="workbook-preview-title">
+        <div class="panel-header">
+          <div><p class="eyebrow">Vista previa</p><h2 id="workbook-preview-title">Contenido del archivo Excel</h2></div>
+          <div class="sheet-tabs"><span>Lecturas</span><span class="is-active">Gráficos</span></div>
+        </div>
+        <div class="report-preview-grid">
+          <div class="preview-sheet">
+            <strong>Hoja Lecturas</strong>
+            <p>Fecha · Hora · Volts · mAmp · Frec</p>
+            <small id="preview-reading-count">0 filas del período seleccionado</small>
+          </div>
+          <div class="preview-chart-list" aria-label="Gráficos incluidos">
+            <article><span class="preview-line voltage-line"></span><strong>Voltaje en el tiempo</strong></article>
+            <article><span class="preview-line current-line"></span><strong>Corriente en el tiempo</strong></article>
+            <article><span class="preview-line frequency-line"></span><strong>Frecuencia en el tiempo</strong></article>
+          </div>
+        </div>
       </section>
       <p class="export-status" id="export-status" role="status"></p>
     </section>

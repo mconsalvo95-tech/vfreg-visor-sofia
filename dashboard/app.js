@@ -49,8 +49,14 @@ const elements = {
   frequencySparkline: document.querySelector("#frequency-sparkline"),
   csvExport: document.querySelector("#csv-export"),
   xlsxExport: document.querySelector("#xlsx-export"),
-  historicalCsvExport: document.querySelector("#historical-csv-export"),
+  reportDownload: document.querySelector("#report-download"),
   exportPeriod: document.querySelector("#export-period"),
+  reportCount: document.querySelector("#report-count"),
+  reportFormat: document.querySelector("#report-format"),
+  reportContent: document.querySelector("#report-content"),
+  reportSummaryTitle: document.querySelector("#report-summary-title"),
+  workbookPreview: document.querySelector("#workbook-preview"),
+  previewReadingCount: document.querySelector("#preview-reading-count"),
   exportStatus: document.querySelector("#export-status"),
   samplingForm: document.querySelector("#sampling-form"),
   pollInterval: document.querySelector("#poll-interval"),
@@ -65,7 +71,16 @@ const elements = {
   activeRangeLabel: document.querySelector("#active-range-label"),
   workdayFilter: document.querySelector("#workday-filter"),
   customRangeToggle: document.querySelector("#custom-range-toggle"),
-  focusRangeControls: document.querySelector("#focus-range-controls")
+  historyPeriodLabel: document.querySelector("#history-period-label"),
+  historyViewFilterForm: document.querySelector("#history-view-filter-form"),
+  historyViewFrom: document.querySelector("#history-view-from"),
+  historyViewTo: document.querySelector("#history-view-to"),
+  historyViewFilterClear: document.querySelector("#history-view-filter-clear"),
+  historyViewFilterResult: document.querySelector("#history-view-filter-result"),
+  reportCustomForm: document.querySelector("#report-custom-form"),
+  reportFrom: document.querySelector("#report-from"),
+  reportTo: document.querySelector("#report-to"),
+  reportCustomResult: document.querySelector("#report-custom-result")
 };
 
 let currentReadings = [];
@@ -74,6 +89,7 @@ let latestStatusData = null;
 let activeRange = { key: "15m", minutes: 15, label: "Últimos 15 minutos", rolling: true };
 let currentView = "live";
 let historyQuality = "all";
+let reportFormat = "xlsx";
 let chartMode = "overview";
 let chartPoints = [];
 let rangeRefreshBusy = false;
@@ -355,6 +371,7 @@ function renderHistory(readings, count, modeLabel) {
   renderReadings(currentReadings);
   drawChart(currentReadings);
   drawSparklines(currentReadings);
+  updateReportSummary();
 }
 
 function renderStatus(data) {
@@ -578,6 +595,7 @@ function productionStartTime() {
 
 function resolvedRange() {
   if (activeRange.key === "custom") return { from: activeRange.from, to: activeRange.to };
+  if (activeRange.key === "history") return { from: "", to: "" };
   const to = new Date();
   if (activeRange.key === "workday") {
     const [hours, minutes] = productionStartTime().split(":").map(Number);
@@ -592,26 +610,62 @@ function resolvedRange() {
   };
 }
 
-function filterQuery({ historical = false } = {}) {
+function filterQuery() {
   const range = resolvedRange();
   const query = new URLSearchParams();
-  if (!historical && range.from) query.set("from", range.from);
+  if (range.from) query.set("from", range.from);
   if (range.to) query.set("to", range.to);
-  return `?${query.toString()}`;
+  const encoded = query.toString();
+  return encoded ? `?${encoded}` : "";
+}
+
+function updateReportSummary() {
+  const query = filterQuery();
+  const xlsx = reportFormat === "xlsx";
+  elements.reportDownload.href = `${xlsx ? "/api/export.xlsx" : "/api/export.csv"}${query}`;
+  elements.reportDownload.download = xlsx ? "vfreg-readings.xlsx" : "vfreg-readings.csv";
+  elements.reportDownload.textContent = xlsx ? "Descargar XLSX" : "Descargar CSV";
+  elements.exportPeriod.textContent = activeRange.label;
+  elements.activeRangeLabel.textContent = activeRange.label;
+  elements.historyPeriodLabel.textContent = activeRange.label;
+  elements.reportCount.textContent = currentRangeCount.toLocaleString("es-AR");
+  elements.previewReadingCount.textContent = `${currentRangeCount.toLocaleString("es-AR")} filas del período seleccionado`;
+  elements.reportFormat.textContent = xlsx ? "Excel + gráficos" : "CSV sin procesar";
+  elements.reportContent.textContent = xlsx ? "Lecturas + Gráficos" : "Fecha, Hora, Volts, mAmp y Frec";
+  elements.reportSummaryTitle.textContent = activeRange.key === "workday"
+    ? "Reporte de jornada actual"
+    : activeRange.key === "history" ? "Reporte histórico completo" : "Reporte del período seleccionado";
+  elements.workbookPreview.hidden = !xlsx;
 }
 
 function updateExportLinks() {
-  const query = filterQuery();
-  elements.csvExport.href = `/api/export.csv${query}`;
-  elements.xlsxExport.href = `/api/export.xlsx${query}`;
-  elements.historicalCsvExport.href = `/api/export.csv${filterQuery({ historical: true })}`;
-  elements.exportPeriod.textContent = activeRange.label;
-  elements.activeRangeLabel.textContent = activeRange.label;
+  updateReportSummary();
 }
 
-function selectPresetButton(selected) {
-  document.querySelectorAll(".shared-range .preset-filters button").forEach((button) => {
-    button.dataset.active = String(button === selected);
+function selectPresetButton() {
+  document.querySelectorAll("[data-range-minutes]").forEach((button) => {
+    button.dataset.active = String(activeRange.key === `${button.dataset.rangeMinutes}m`);
+  });
+  document.querySelectorAll("[data-history-minutes]").forEach((button) => {
+    button.dataset.active = String(activeRange.key === `${button.dataset.historyMinutes}m`);
+  });
+  document.querySelectorAll("[data-history-workday]").forEach((button) => {
+    button.dataset.active = String(activeRange.key === "workday");
+  });
+  document.querySelectorAll("[data-history-custom]").forEach((button) => {
+    button.dataset.active = String(activeRange.key === "custom");
+  });
+  elements.workdayFilter.dataset.active = String(activeRange.key === "workday");
+  elements.customRangeToggle.dataset.active = String(activeRange.key === "custom");
+  document.querySelectorAll("[data-report-scope]").forEach((button) => {
+    button.classList.toggle("is-selected", button.dataset.reportScope === activeRange.key);
+  });
+}
+
+function setRangeStatus(message, error = false) {
+  [elements.historyFilterResult, elements.historyViewFilterResult].forEach((element) => {
+    element.dataset.error = String(error);
+    element.textContent = message;
   });
 }
 
@@ -619,14 +673,12 @@ async function loadActiveRange({ announce = true } = {}) {
   if (rangeRefreshBusy) return;
   const { from, to } = resolvedRange();
   if (from && to && new Date(from) > new Date(to)) {
-    elements.historyFilterResult.dataset.error = "true";
-    elements.historyFilterResult.textContent = "La fecha Desde debe ser anterior a Hasta";
+    setRangeStatus("La fecha Desde debe ser anterior a Hasta", true);
     return;
   }
   rangeRefreshBusy = true;
   updateExportLinks();
-  elements.historyFilterResult.dataset.error = "false";
-  if (announce) elements.historyFilterResult.textContent = "Cargando período…";
+  if (announce) setRangeStatus("Cargando período…");
   const query = new URLSearchParams({ limit: "5000" });
   if (from) query.set("from", from);
   if (to) query.set("to", to);
@@ -636,73 +688,87 @@ async function loadActiveRange({ announce = true } = {}) {
     if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
     renderHistory(result.readings || [], result.count || 0, activeRange.label);
     const hiddenCount = Math.max(0, Number(result.count || 0) - (result.readings || []).length);
-    elements.historyFilterResult.textContent = hiddenCount
+    setRangeStatus(hiddenCount
       ? `${Number(result.count).toLocaleString("es-AR")} coincidencias; se muestran las últimas 5.000`
-      : `${Number(result.count || 0).toLocaleString("es-AR")} lecturas en ${activeRange.label.toLowerCase()}`;
+      : `${Number(result.count || 0).toLocaleString("es-AR")} lecturas en ${activeRange.label.toLowerCase()}`);
   } catch (error) {
-    elements.historyFilterResult.dataset.error = "true";
-    elements.historyFilterResult.textContent = error.message;
+    setRangeStatus(error.message, true);
   } finally {
     rangeRefreshBusy = false;
   }
 }
 
-function applyPreset(minutes, button) {
+function hideCustomRangeForms() {
+  elements.historyFilterForm.hidden = true;
+  elements.historyViewFilterForm.hidden = true;
+  elements.reportCustomForm.hidden = true;
+  elements.customRangeToggle.setAttribute("aria-expanded", "false");
+}
+
+function applyPreset(minutes) {
   activeRange = {
     key: `${minutes}m`,
     minutes,
     label: minutes === 60 ? "Última hora" : `Últimos ${minutes} minutos`,
     rolling: true
   };
-  selectPresetButton(button);
-  elements.historyFilterForm.hidden = true;
-  elements.customRangeToggle.setAttribute("aria-expanded", "false");
+  hideCustomRangeForms();
+  selectPresetButton();
   loadActiveRange();
 }
 
 function applyWorkday() {
   activeRange = { key: "workday", label: `Jornada actual · desde ${productionStartTime()}`, rolling: true };
-  selectPresetButton(elements.workdayFilter);
-  elements.historyFilterForm.hidden = true;
-  elements.customRangeToggle.setAttribute("aria-expanded", "false");
+  hideCustomRangeForms();
+  selectPresetButton();
+  loadActiveRange();
+}
+
+function applyHistoricalRange() {
+  activeRange = { key: "history", label: "Histórico completo", rolling: false };
+  hideCustomRangeForms();
+  selectPresetButton();
+  loadActiveRange();
+}
+
+function applyCustomRange(from, to, resultElement) {
+  if (!from || !to) {
+    resultElement.dataset.error = "true";
+    resultElement.textContent = "Complete Desde y Hasta para aplicar el período";
+    return;
+  }
+  if (new Date(from) > new Date(to)) {
+    resultElement.dataset.error = "true";
+    resultElement.textContent = "La fecha Desde debe ser anterior a Hasta";
+    return;
+  }
+  resultElement.dataset.error = "false";
+  resultElement.textContent = "Período aplicado";
+  activeRange = { key: "custom", from, to, label: "Período personalizado", rolling: false };
+  selectPresetButton();
   loadActiveRange();
 }
 
 function submitHistoryFilter(event) {
   event.preventDefault();
-  const from = elements.historyFrom.value;
-  const to = elements.historyTo.value;
-  if (!from || !to) {
-    elements.historyFilterResult.dataset.error = "true";
-    elements.historyFilterResult.textContent = "Complete Desde y Hasta para aplicar el período";
-    return;
-  }
-  if (new Date(from) > new Date(to)) {
-    elements.historyFilterResult.dataset.error = "true";
-    elements.historyFilterResult.textContent = "La fecha Desde debe ser anterior a Hasta";
-    return;
-  }
-  activeRange = { key: "custom", from, to, label: "Período personalizado", rolling: false };
-  selectPresetButton(elements.customRangeToggle);
-  loadActiveRange();
+  applyCustomRange(elements.historyFrom.value, elements.historyTo.value, elements.historyFilterResult);
 }
 
 function clearHistoryFilter() {
   elements.historyFrom.value = "";
   elements.historyTo.value = "";
-  const defaultButton = document.querySelector('[data-range-minutes="15"]');
-  applyPreset(15, defaultButton);
+  applyPreset(15);
 }
 
 async function downloadXlsx(event) {
   event.preventDefault();
-  if (elements.xlsxExport.dataset.busy === "true") return;
-  elements.xlsxExport.dataset.busy = "true";
-  elements.xlsxExport.setAttribute("aria-disabled", "true");
+  if (elements.reportDownload.dataset.busy === "true") return;
+  elements.reportDownload.dataset.busy = "true";
+  elements.reportDownload.setAttribute("aria-disabled", "true");
   elements.exportStatus.dataset.error = "false";
   elements.exportStatus.textContent = "Preparando archivo Excel…";
   try {
-    const response = await fetch(elements.xlsxExport.href, { cache: "no-store" });
+    const response = await fetch(elements.reportDownload.href, { cache: "no-store" });
     if (!response.ok) {
       const result = await response.json().catch(() => ({}));
       throw new Error(result.error || `No se pudo exportar Excel (HTTP ${response.status})`);
@@ -721,8 +787,8 @@ async function downloadXlsx(event) {
     elements.exportStatus.dataset.error = "true";
     elements.exportStatus.textContent = error.message;
   } finally {
-    elements.xlsxExport.dataset.busy = "false";
-    elements.xlsxExport.removeAttribute("aria-disabled");
+    elements.reportDownload.dataset.busy = "false";
+    elements.reportDownload.removeAttribute("aria-disabled");
   }
 }
 
@@ -751,42 +817,84 @@ async function savePollingInterval(event) {
   }
 }
 
+function openCustomForm(form, fromElement, toElement) {
+  const opening = form.hidden;
+  form.hidden = !opening;
+  if (!opening) return;
+  const range = resolvedRange();
+  const now = new Date();
+  fromElement.value = range.from || localInputValue(new Date(now.getTime() - 15 * 60000));
+  toElement.value = range.to || localInputValue(now);
+  fromElement.focus();
+}
+
+function setReportFormat(format) {
+  reportFormat = format;
+  document.querySelectorAll("[data-report-format]").forEach((button) => {
+    button.classList.toggle("is-selected", button.dataset.reportFormat === format);
+  });
+  updateReportSummary();
+}
+
 document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
 document.querySelectorAll("[data-view-target]").forEach((button) => button.addEventListener("click", () => setView(button.dataset.viewTarget)));
-document.querySelectorAll("[data-go-reports]").forEach((button) => button.addEventListener("click", () => setView("reports")));
+document.querySelectorAll("[data-go-reports]").forEach((button) => button.addEventListener("click", () => {
+  selectPresetButton();
+  setView("reports");
+}));
 elements.retryConnection.addEventListener("click", refresh);
-elements.xlsxExport.addEventListener("click", downloadXlsx);
-elements.csvExport.addEventListener("click", () => {
-  elements.exportStatus.dataset.error = "false";
-  elements.exportStatus.textContent = "Descarga CSV iniciada";
+elements.reportDownload.addEventListener("click", (event) => {
+  if (reportFormat === "xlsx") downloadXlsx(event);
+  else {
+    elements.exportStatus.dataset.error = "false";
+    elements.exportStatus.textContent = "Descarga CSV iniciada";
+  }
 });
-elements.historicalCsvExport.addEventListener("click", () => {
-  elements.exportStatus.dataset.error = "false";
-  elements.exportStatus.textContent = "Descarga histórica iniciada";
-});
+elements.csvExport.addEventListener("click", () => setReportFormat("csv"));
+elements.xlsxExport.addEventListener("click", () => setReportFormat("xlsx"));
 elements.pollInterval.addEventListener("change", () => updateSamplingEstimate(elements.pollInterval.value));
 elements.samplingForm.addEventListener("submit", savePollingInterval);
 elements.historyFilterForm.addEventListener("submit", submitHistoryFilter);
 elements.historyFilterClear.addEventListener("click", clearHistoryFilter);
 elements.workdayFilter.addEventListener("click", applyWorkday);
 elements.customRangeToggle.addEventListener("click", () => {
-  const opening = elements.historyFilterForm.hidden;
-  elements.historyFilterForm.hidden = !opening;
-  elements.customRangeToggle.setAttribute("aria-expanded", String(opening));
-  if (opening) {
-    const range = resolvedRange();
-    elements.historyFrom.value = range.from;
-    elements.historyTo.value = range.to;
-    elements.historyFrom.focus();
-  }
-});
-elements.focusRangeControls.addEventListener("click", () => {
-  setView("live");
-  document.querySelector(".shared-range").scrollIntoView({ behavior: "smooth", block: "start" });
-  elements.customRangeToggle.focus();
+  openCustomForm(elements.historyFilterForm, elements.historyFrom, elements.historyTo);
+  elements.customRangeToggle.setAttribute("aria-expanded", String(!elements.historyFilterForm.hidden));
 });
 document.querySelectorAll("[data-range-minutes]").forEach((button) => {
-  button.addEventListener("click", () => applyPreset(Number(button.dataset.rangeMinutes), button));
+  button.addEventListener("click", () => applyPreset(Number(button.dataset.rangeMinutes)));
+});
+document.querySelectorAll("[data-history-minutes]").forEach((button) => {
+  button.addEventListener("click", () => applyPreset(Number(button.dataset.historyMinutes)));
+});
+document.querySelectorAll("[data-history-workday]").forEach((button) => button.addEventListener("click", applyWorkday));
+document.querySelectorAll("[data-history-custom]").forEach((button) => {
+  button.addEventListener("click", () => openCustomForm(elements.historyViewFilterForm, elements.historyViewFrom, elements.historyViewTo));
+});
+elements.historyViewFilterForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  applyCustomRange(elements.historyViewFrom.value, elements.historyViewTo.value, elements.historyViewFilterResult);
+});
+elements.historyViewFilterClear.addEventListener("click", () => {
+  elements.historyViewFrom.value = "";
+  elements.historyViewTo.value = "";
+  elements.historyViewFilterForm.hidden = true;
+  applyPreset(15);
+});
+document.querySelectorAll("[data-report-scope]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const scope = button.dataset.reportScope;
+    if (scope === "workday") applyWorkday();
+    else if (scope === "history") applyHistoricalRange();
+    else {
+      document.querySelectorAll("[data-report-scope]").forEach((candidate) => candidate.classList.toggle("is-selected", candidate === button));
+      openCustomForm(elements.reportCustomForm, elements.reportFrom, elements.reportTo);
+    }
+  });
+});
+elements.reportCustomForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  applyCustomRange(elements.reportFrom.value, elements.reportTo.value, elements.reportCustomResult);
 });
 document.querySelectorAll("[data-quality-filter]").forEach((button) => {
   button.addEventListener("click", () => {
@@ -826,6 +934,8 @@ window.addEventListener("resize", () => {
 
 updateClock();
 setView("live");
+selectPresetButton();
+setReportFormat("xlsx");
 updateExportLinks();
 refresh();
 loadActiveRange();

@@ -51,18 +51,34 @@ class Phase6CInteractionTests(unittest.TestCase):
         self.assertIn("loadActiveRange", self.javascript)
         self.assertIn("renderHistory(result.readings", self.javascript)
         self.assertIn("drawChart(currentReadings)", self.javascript)
-        self.assertIn("elements.csvExport.href", self.javascript)
-        self.assertIn("elements.xlsxExport.href", self.javascript)
+        self.assertIn("elements.reportDownload.href", self.javascript)
+        self.assertIn('"/api/export.xlsx" : "/api/export.csv"', self.javascript)
         self.assertIn("elements.recordCount.textContent", self.javascript)
 
     def test_quality_filter_is_presentational_and_historical_export_is_separate(self) -> None:
         for quality in ("all", "valid", "alarm"):
             self.assertIn(f'data-quality-filter="{quality}"', self.html)
-        self.assertIn('id="historical-csv-export"', self.html)
-        self.assertIn("filterQuery({ historical: true })", self.javascript)
-        self.assertIn("if (!historical && range.from)", self.javascript)
+        self.assertIn('data-report-scope="history"', self.html)
+        self.assertIn('id="report-download"', self.html)
+        self.assertIn('activeRange.key === "history"', self.javascript)
         self.assertNotIn("/api/delete", self.javascript)
         self.assertNotIn("/api/modbus", self.javascript)
+
+    def test_history_and_reports_restore_period_and_preview_workflows(self) -> None:
+        for element_id in (
+            "history-period-label",
+            "history-view-filter-form",
+            "report-custom-form",
+            "report-summary-title",
+            "report-format",
+            "report-content",
+            "workbook-preview",
+        ):
+            self.assertIn(f'id="{element_id}"', self.html)
+        self.assertIn('data-history-minutes="15"', self.html)
+        self.assertIn('data-report-format="xlsx"', self.html)
+        self.assertIn("function setReportFormat", self.javascript)
+        self.assertIn("elements.workbookPreview.hidden = !xlsx", self.javascript)
 
     def test_chart_has_sparklines_modes_zoom_tooltip_and_reset(self) -> None:
         for element_id in (

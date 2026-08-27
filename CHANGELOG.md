@@ -55,6 +55,10 @@ release.
   Report's **Change period** action returns directly to the chart selector.
 - Scoped the recording-interval control to **Live Monitoring** so it is hidden
   automatically in the History and Reports views.
+- Restored synchronized period controls inside History and a guided Reports
+  workflow with workday, full-history, and custom scopes. Report format
+  selection once again updates a visible download summary, and selecting
+  **Excel + charts** reveals a truthful workbook-content preview.
 
 ## 0.1.0-pilot-success — 2026-08-24
 
