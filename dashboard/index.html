@@ -41,28 +41,6 @@
   </header>
 
   <main id="main-content">
-    <section class="panel operator-controls" aria-labelledby="operator-controls-title">
-      <div class="range-summary">
-        <p class="eyebrow">Controles del monitoreo</p>
-        <h2 id="operator-controls-title">Intervalo de lectura</h2>
-        <span>Configure cada cuánto tiempo se registra un dato.</span>
-      </div>
-      <form class="sampling-form sampling-compact" id="sampling-form">
-        <label for="poll-interval">Registrar una lectura cada</label>
-        <select id="poll-interval" name="seconds">
-          <option value="0.5">0,5 segundos · prueba rápida</option>
-          <option value="1">1 segundo</option>
-          <option value="5">5 segundos</option>
-          <option value="15">15 segundos</option>
-          <option value="30">30 segundos</option>
-          <option value="60">1 minuto</option>
-        </select>
-        <button class="primary-button" id="sampling-save" type="submit">Aplicar</button>
-        <span class="sampling-result" id="sampling-result" role="status"></span>
-        <small id="daily-reading-estimate">-- lecturas/día</small>
-      </form>
-    </section>
-
     <section class="app-view is-active" id="view-live" data-view-panel="live">
       <div class="page-heading">
         <div>
@@ -76,6 +54,28 @@
           <small id="reading-date">Sin lecturas</small>
         </div>
       </div>
+
+      <section class="panel operator-controls" aria-labelledby="operator-controls-title">
+        <div class="range-summary">
+          <p class="eyebrow">Controles del monitoreo</p>
+          <h2 id="operator-controls-title">Intervalo de lectura</h2>
+          <span>Configure cada cuánto tiempo se registra un dato.</span>
+        </div>
+        <form class="sampling-form sampling-compact" id="sampling-form">
+          <label for="poll-interval">Registrar una lectura cada</label>
+          <select id="poll-interval" name="seconds">
+            <option value="0.5">0,5 segundos · prueba rápida</option>
+            <option value="1">1 segundo</option>
+            <option value="5">5 segundos</option>
+            <option value="15">15 segundos</option>
+            <option value="30">30 segundos</option>
+            <option value="60">1 minuto</option>
+          </select>
+          <button class="primary-button" id="sampling-save" type="submit">Aplicar</button>
+          <span class="sampling-result" id="sampling-result" role="status"></span>
+          <small id="daily-reading-estimate">-- lecturas/día</small>
+        </form>
+      </section>
 
       <div class="system-banner" id="system-banner" data-state="info" role="status">
         <span class="banner-icon" id="banner-icon" aria-hidden="true">…</span>

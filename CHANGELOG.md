@@ -53,6 +53,8 @@ release.
   moved the displayed time range into the Live Monitoring trends panel that it
   directly controls. The controls no longer remain pinned while scrolling, and
   Report's **Change period** action returns directly to the chart selector.
+- Scoped the recording-interval control to **Live Monitoring** so it is hidden
+  automatically in the History and Reports views.
 
 ## 0.1.0-pilot-success — 2026-08-24
 

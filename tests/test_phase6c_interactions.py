@@ -34,9 +34,11 @@ class Phase6CInteractionTests(unittest.TestCase):
     def test_recording_interval_and_chart_period_are_placed_by_purpose(self) -> None:
         control_start = self.html.index('class="panel operator-controls"')
         live_start = self.html.index('id="view-live"')
+        history_start = self.html.index('id="view-history"')
         sampling_start = self.html.index('id="sampling-form"')
+        self.assertLess(live_start, control_start)
         self.assertLess(control_start, sampling_start)
-        self.assertLess(sampling_start, live_start)
+        self.assertLess(sampling_start, history_start)
         chart_start = self.html.index('id="live-chart-title"')
         range_start = self.html.index('class="shared-range"')
         self.assertGreater(range_start, chart_start)
