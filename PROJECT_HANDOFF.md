@@ -112,7 +112,10 @@ Wireshark on the factory computer.
 - The synchronized period can now be changed directly from History or through
   the guided Reports workflow. Reports provides workday, complete-history, and
   custom scopes, CSV/XLSX format selection, a live download summary, and an
-  XLSX workbook-content preview. The complete suite passes 65 tests.
+  XLSX workbook-content preview. The three live metric-card sparklines are now
+  independent from that period: each always shows the latest 40 readings and
+  labels its approximate coverage from the active recording interval. The
+  complete suite passes 66 tests.
 - The current-workday start is configured with
   `factory.production_start_time` and defaults to `06:00`.
 

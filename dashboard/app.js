@@ -47,6 +47,7 @@ const elements = {
   voltageSparkline: document.querySelector("#voltage-sparkline"),
   currentSparkline: document.querySelector("#current-sparkline"),
   frequencySparkline: document.querySelector("#frequency-sparkline"),
+  sparklineWindows: document.querySelectorAll(".sparkline-window"),
   csvExport: document.querySelector("#csv-export"),
   xlsxExport: document.querySelector("#xlsx-export"),
   reportDownload: document.querySelector("#report-download"),
@@ -138,6 +139,21 @@ function updateSamplingEstimate(seconds) {
   const interval = Number(seconds);
   const readingsPerDay = interval > 0 ? Math.round(86400 / interval) : 0;
   elements.dailyReadingEstimate.textContent = `${readingsPerDay.toLocaleString("es-AR")} lecturas/día.`;
+  const coverageSeconds = interval * 40;
+  let coverage;
+  if (coverageSeconds < 60) coverage = `~${coverageSeconds.toLocaleString("es-AR")} segundos`;
+  else if (coverageSeconds < 3600) {
+    const minutes = Math.floor(coverageSeconds / 60);
+    const remainingSeconds = Math.round(coverageSeconds % 60);
+    coverage = remainingSeconds ? `~${minutes} min ${remainingSeconds} s` : `~${minutes} minutos`;
+  } else {
+    const hours = Math.floor(coverageSeconds / 3600);
+    const minutes = Math.round((coverageSeconds % 3600) / 60);
+    coverage = minutes ? `~${hours} h ${minutes} min` : `~${hours} horas`;
+  }
+  elements.sparklineWindows.forEach((element) => {
+    element.textContent = `Últimas 40 lecturas · ${coverage}`;
+  });
 }
 
 function isProductionPaused(reading) {
@@ -370,7 +386,6 @@ function renderHistory(readings, count, modeLabel) {
   elements.historyMode.textContent = modeLabel;
   renderReadings(currentReadings);
   drawChart(currentReadings);
-  drawSparklines(currentReadings);
   updateReportSummary();
 }
 
@@ -407,6 +422,7 @@ function renderStatus(data) {
   updateConnectionAndProcess(data, mode);
   updateMetrics(data, mode);
   updateSystemBanner(data, mode);
+  drawSparklines(data.readings || []);
 }
 
 const CHART_SERIES = Object.freeze([
@@ -580,7 +596,7 @@ function setView(view) {
   });
   if (view === "live") window.requestAnimationFrame(() => {
     drawChart(currentReadings);
-    drawSparklines(currentReadings);
+    drawSparklines(latestStatusData?.readings || []);
   });
 }
 
@@ -928,7 +944,7 @@ elements.canvas.addEventListener("pointerleave", () => { elements.chartTooltip.h
 window.addEventListener("resize", () => {
   if (currentView === "live") {
     drawChart(currentReadings);
-    drawSparklines(currentReadings);
+    drawSparklines(latestStatusData?.readings || []);
   }
 });
 

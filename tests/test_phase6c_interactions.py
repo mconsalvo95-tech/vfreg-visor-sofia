@@ -94,6 +94,13 @@ class Phase6CInteractionTests(unittest.TestCase):
         self.assertIn("function showChartTooltip", self.javascript)
         self.assertIn("position: sticky", self.styles)
 
+    def test_card_sparklines_use_latest_live_readings_not_selected_range(self) -> None:
+        self.assertEqual(self.html.count('class="sparkline-window"'), 3)
+        self.assertIn("drawSparklines(data.readings || [])", self.javascript)
+        self.assertIn("Últimas 40 lecturas", self.javascript)
+        render_history = self.javascript.split("function renderHistory", 1)[1].split("function renderStatus", 1)[0]
+        self.assertNotIn("drawSparklines", render_history)
+
     def test_example_configuration_defines_six_am_workday(self) -> None:
         config = json.loads((PROJECT_ROOT / "config.example.json").read_text(encoding="utf-8"))
         self.assertEqual(config["factory"]["production_start_time"], "06:00")
