@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
-from datetime import date, time, timedelta
 from unittest.mock import patch
 
 from openpyxl import load_workbook
@@ -63,13 +62,13 @@ class XlsxExportTests(unittest.TestCase):
                 [workbook["Raw Data"].cell(1, column).value for column in range(1, 6)],
                 ["Fecha", "Hora", "Volts", "mAmp", "Frec"],
             )
-            self.assertIsInstance(workbook["Raw Data"]["A2"].value, date)
-            self.assertIsInstance(workbook["Raw Data"]["B2"].value, time)
+            self.assertRegex(workbook["Raw Data"]["A2"].value, r"^\d{4}-\d{2}-\d{2}$")
+            self.assertRegex(workbook["Raw Data"]["B2"].value, r"^\d{2}:\d{2}:\d{2}$")
             self.assertEqual(
                 workbook["Raw Data"]["A2"].number_format,
-                "yyyy-mm-dd",
+                "@",
             )
-            self.assertEqual(workbook["Raw Data"]["B2"].number_format, "hh:mm:ss")
+            self.assertEqual(workbook["Raw Data"]["B2"].number_format, "@")
             self.assertEqual(workbook["Report"]["A5"].value, "Parámetro")
             self.assertEqual(workbook["Report"]["E5"].value, "Promedio")
             self.assertEqual(workbook["Report"]["F5"].value, "Fuera de rango")
@@ -133,9 +132,11 @@ class XlsxExportTests(unittest.TestCase):
 
             self.assertEqual(report["B3"].value, 5)
             self.assertEqual(report["D3"].value, 4)
-            self.assertEqual(report["F2"].value, timedelta(seconds=10))
-            self.assertEqual(report["F3"].value, timedelta(seconds=25))
-            self.assertEqual(report["F2"].number_format, "[h]:mm:ss")
+            self.assertEqual(report["B2"].value, "2026-08-21 10:00:00")
+            self.assertEqual(report["D2"].value, "2026-08-21 10:00:50")
+            self.assertEqual(report["F2"].value, "00:00:10")
+            self.assertEqual(report["F3"].value, "00:00:25")
+            self.assertEqual(report["F2"].number_format, "@")
             self.assertEqual(workbook["Raw Data"]["C3"].value, 0)
             self.assertEqual(workbook["Raw Data"]["E3"].value, 202)
             self.assertEqual(workbook["Raw Data"]["R3"].value, True)
@@ -176,7 +177,7 @@ class XlsxExportTests(unittest.TestCase):
             )
             workbook = load_workbook(xlsx_path)
             self.assertEqual(workbook["Raw Data"].max_row, 2)
-            self.assertEqual(workbook["Raw Data"]["B2"].value.hour, 11)
+            self.assertEqual(workbook["Raw Data"]["B2"].value, "11:00:00")
 
     def test_chart_sampling_preserves_first_and_last_rows(self) -> None:
         rows = sampled_row_numbers(60001, max_points=2000)

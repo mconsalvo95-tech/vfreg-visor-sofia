@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import math
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from openpyxl import Workbook
 from openpyxl.chart import LineChart, Reference
@@ -210,9 +210,9 @@ def style_raw_data_sheet(sheet) -> None:
     for index, width in enumerate((14, 12, 14, 14, 14), start=1):
         sheet.column_dimensions[get_column_letter(index)].width = width
     for cell in sheet["A"][1:]:
-        cell.number_format = "yyyy-mm-dd"
+        cell.number_format = "@"
     for cell in sheet["B"][1:]:
-        cell.number_format = "hh:mm:ss"
+        cell.number_format = "@"
     for row in sheet.iter_rows(min_row=2, min_col=3, max_col=5):
         for cell in row:
             cell.number_format = "0.0"
@@ -236,23 +236,21 @@ def build_report_sheet(
     report_sheet.row_dimensions[1].height = 30
 
     report_sheet["A2"] = "Inicio"
-    report_sheet["B2"] = statistics.start
+    report_sheet["B2"] = format_report_datetime(statistics.start)
     report_sheet["C2"] = "Fin"
-    report_sheet["D2"] = statistics.end
+    report_sheet["D2"] = format_report_datetime(statistics.end)
     report_sheet["E2"] = "Producción detenida"
-    report_sheet["F2"] = timedelta(seconds=statistics.paused_seconds)
+    report_sheet["F2"] = format_duration(statistics.paused_seconds)
     report_sheet["A3"] = "Registros totales"
     report_sheet["B3"] = statistics.total_count
     report_sheet["C3"] = "Lecturas válidas"
     report_sheet["D3"] = statistics.valid_count
     report_sheet["E3"] = "Sin conexión estimado"
-    report_sheet["F3"] = timedelta(seconds=statistics.disconnected_seconds)
+    report_sheet["F3"] = format_duration(statistics.disconnected_seconds)
     for address in ("A2", "C2", "E2", "A3", "C3", "E3"):
         report_sheet[address].font = Font(bold=True, color=MUTED)
-    for address in ("B2", "D2"):
-        report_sheet[address].number_format = "yyyy-mm-dd hh:mm:ss"
-    for address in ("F2", "F3"):
-        report_sheet[address].number_format = "[h]:mm:ss"
+    for address in ("B2", "D2", "F2", "F3"):
+        report_sheet[address].number_format = "@"
     for address in ("B2", "D2", "F2", "B3", "D3", "F3"):
         report_sheet[address].alignment = Alignment(horizontal="center")
 
@@ -356,7 +354,7 @@ def add_chart_helper_data(readings_sheet) -> None:
         readings_sheet.cell(1, first_helper_column + offset, header)
     for helper_row, raw_row in enumerate(sampled_row_numbers(readings_sheet.max_row), start=2):
         formulas = [
-            f'=TEXT(A{raw_row},"yyyy-mm-dd")&" "&TEXT(B{raw_row},"hh:mm:ss")',
+            f'=A{raw_row}&" "&B{raw_row}',
             f"=C{raw_row}",
             '=IF(OR(Report!$B$6="",Report!$C$6=""),"",Report!$B$6)',
             '=IF(OR(Report!$B$6="",Report!$C$6=""),"",Report!$C$6)',
@@ -369,7 +367,7 @@ def add_chart_helper_data(readings_sheet) -> None:
         ]
         for offset, formula in enumerate(formulas):
             readings_sheet.cell(helper_row, first_helper_column + offset, formula)
-        readings_sheet.cell(helper_row, first_helper_column).number_format = "yyyy-mm-dd hh:mm:ss"
+        readings_sheet.cell(helper_row, first_helper_column).number_format = "@"
     for column in range(first_helper_column, first_helper_column + len(helper_headers)):
         readings_sheet.column_dimensions[get_column_letter(column)].hidden = True
 
@@ -418,7 +416,7 @@ def excel_date_time(value):
     formatted = format_manager_timestamp(value)
     try:
         parsed = datetime.strptime(formatted, "%Y-%m-%dT%H:%M:%S")
-        return parsed.date(), parsed.time().replace(microsecond=0)
+        return parsed.strftime("%Y-%m-%d"), parsed.strftime("%H:%M:%S")
     except (TypeError, ValueError):
         return formatted, ""
 
@@ -431,6 +429,17 @@ def parse_report_datetime(value) -> datetime | None:
     except (TypeError, ValueError):
         return None
     return parsed.replace(tzinfo=None)
+
+
+def format_report_datetime(value: datetime | None) -> str:
+    return value.strftime("%Y-%m-%d %H:%M:%S") if value is not None else ""
+
+
+def format_duration(seconds: float) -> str:
+    total_seconds = max(0, int(round(seconds)))
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, remaining_seconds = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{remaining_seconds:02d}"
 
 
 def expected_interval_seconds(cfg: dict) -> float:
