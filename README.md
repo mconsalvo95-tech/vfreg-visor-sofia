@@ -23,9 +23,12 @@ associate a measurement with an individual bird.
 - Management CSV and XLSX exports containing only Fecha, Hora, Volts, mAmp, and
   Frec, with no 5,000-record export cap. Active report periods apply to both
   downloads. XLSX opens on a separate Report worksheet with editable blank
-  minimum/maximum limits, positive-reading averages, and three charts; the
-  complete selected readings remain in Raw Data. Full connection and quality
-  evidence stays in the SQLite database and raw JSONL journal.
+  minimum/maximum limits, production-aware averages, report-period and reading
+  counts, separate estimated pause/disconnection durations, dynamic
+  out-of-range counts, and three charts. The complete selected readings remain
+  in Raw Data. Oversized XLSX requests return clear smaller-period/CSV guidance
+  without interrupting collection. Full connection and quality evidence stays
+  in the SQLite database and raw JSONL journal.
 - In-place migration of databases created by the earlier prototype.
 
 Port `5000` and the simulated JSON message format remain test assumptions only

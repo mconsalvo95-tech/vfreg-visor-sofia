@@ -3,11 +3,17 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
-from datetime import date, time
+from datetime import date, time, timedelta
+from unittest.mock import patch
 
 from openpyxl import load_workbook
 
-from vfreg_visor.exports import build_xlsx, sampled_row_numbers
+from vfreg_visor.exports import (
+    EXCEL_MAX_DATA_ROWS,
+    XlsxRowLimitError,
+    build_xlsx,
+    sampled_row_numbers,
+)
 from vfreg_visor.storage import Measurement, append_sqlite, now_iso
 
 
@@ -66,16 +72,85 @@ class XlsxExportTests(unittest.TestCase):
             self.assertEqual(workbook["Raw Data"]["B2"].number_format, "hh:mm:ss")
             self.assertEqual(workbook["Report"]["A5"].value, "Parámetro")
             self.assertEqual(workbook["Report"]["E5"].value, "Promedio")
+            self.assertEqual(workbook["Report"]["F5"].value, "Fuera de rango")
             self.assertEqual(workbook["Report"]["A6"].value, "Voltaje")
             self.assertIsNone(workbook["Report"]["B6"].value)
             self.assertIsNone(workbook["Report"]["C6"].value)
-            self.assertIn("AVERAGEIF", workbook["Report"]["E6"].value)
-            self.assertIn('">0"', workbook["Report"]["E6"].value)
+            self.assertIn("AVERAGEIFS", workbook["Report"]["E6"].value)
+            self.assertIn('">0.5"', workbook["Report"]["E6"].value)
+            self.assertIn("S$2:S$4,TRUE", workbook["Report"]["E6"].value)
+            self.assertIn("R$2:R$4,FALSE", workbook["Report"]["F6"].value)
+            self.assertNotIn("R$2:R$4,FALSE", workbook["Report"]["F8"].value)
             self.assertIn(
                 'OR(Report!$B$6="",Report!$C$6="")',
                 workbook["Raw Data"]["J2"].value,
             )
+            self.assertTrue(workbook["Raw Data"].column_dimensions["R"].hidden)
+            self.assertTrue(workbook["Raw Data"].column_dimensions["S"].hidden)
+            self.assertEqual(workbook["Raw Data"]["S2"].value, True)
             self.assertEqual(len(workbook["Report"].data_validations.dataValidation), 1)
+
+    def test_report_separates_pause_and_disconnection_statistics(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            sqlite_path = os.path.join(directory, "readings.sqlite")
+            xlsx_path = os.path.join(directory, "readings.xlsx")
+            readings = (
+                ("2026-08-21T10:00:00-03:00", 35, 340, 202, "GOOD"),
+                ("2026-08-21T10:00:05-03:00", 0, 0, 202, "GOOD"),
+                ("2026-08-21T10:00:10-03:00", 0, 0, 202, "GOOD"),
+                ("2026-08-21T10:00:15-03:00", 35, 340, 202, "GOOD"),
+                ("2026-08-21T10:00:45-03:00", 35, 340, 202, "INVALID"),
+            )
+            for sequence, (timestamp, volts, milliamps, frequency, quality) in enumerate(
+                readings,
+                start=1,
+            ):
+                append_sqlite(
+                    sqlite_path,
+                    Measurement(
+                        timestamp,
+                        "modbus",
+                        sequence,
+                        volts,
+                        milliamps,
+                        frequency,
+                        quality_flag=quality,
+                    ),
+                )
+            cfg = {
+                "output_sqlite": sqlite_path,
+                "output_xlsx": xlsx_path,
+                "network": {"modbus": {"poll_interval_seconds": 5}},
+            }
+
+            build_xlsx(
+                cfg,
+                start_time="2026-08-21T10:00:00-03:00",
+                end_time="2026-08-21T10:00:50-03:00",
+            )
+            workbook = load_workbook(xlsx_path, data_only=False)
+            report = workbook["Report"]
+
+            self.assertEqual(report["B3"].value, 5)
+            self.assertEqual(report["D3"].value, 4)
+            self.assertEqual(report["F2"].value, timedelta(seconds=10))
+            self.assertEqual(report["F3"].value, timedelta(seconds=25))
+            self.assertEqual(report["F2"].number_format, "[h]:mm:ss")
+            self.assertEqual(workbook["Raw Data"]["C3"].value, 0)
+            self.assertEqual(workbook["Raw Data"]["E3"].value, 202)
+            self.assertEqual(workbook["Raw Data"]["R3"].value, True)
+            self.assertIn('">0.1"', report["E8"].value)
+
+    def test_xlsx_row_limit_requires_smaller_range_or_csv(self) -> None:
+        cfg = {"output_sqlite": "unused.sqlite", "output_xlsx": "unused.xlsx"}
+        with patch(
+            "vfreg_visor.exports.fetch_summary",
+            return_value={"count": EXCEL_MAX_DATA_ROWS + 1},
+        ):
+            with self.assertRaises(XlsxRowLimitError) as raised:
+                build_xlsx(cfg)
+        self.assertIn("CSV", str(raised.exception))
+        self.assertIn("recolección continúa activa", str(raised.exception))
 
     def test_factory_export_respects_selected_time_period(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

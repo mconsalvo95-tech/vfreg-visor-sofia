@@ -276,17 +276,17 @@ management exports without changing collection, storage, or device behavior.
   **Not configured**, never as zero.
 - [x] Calculate averages from positive readings only so missing/incomplete zero
   values do not distort the report.
-- [ ] Preserve production-pause readings in Raw Data. Exclude zero/near-zero
+- [x] Preserve production-pause readings in Raw Data. Exclude zero/near-zero
   Volts and mAmp from production averages while retaining received frequency,
   and report paused duration separately from disconnection time.
-- [ ] Add report start/end time, record counts, valid-reading counts, and
+- [x] Add report start/end time, record counts, valid-reading counts, and
   per-parameter out-of-range counts.
 - [x] Add separate Voltage, mAmp, and Frequency charts. Each chart must show the
   measured series and display its minimum/maximum limit lines only after the
   employee configures both limits.
 - [x] Keep formula/helper columns hidden and preserve all selected raw readings
   even when the Report excludes invalid readings from calculations.
-- [ ] Protect against Excel's 1,048,576-row worksheet limit by requiring a
+- [x] Protect against Excel's 1,048,576-row worksheet limit by requiring a
   smaller range, splitting large XLSX history by period, or directing the user
   to CSV without interrupting collection.
 ### Phase 6E — Validation and production-PC review

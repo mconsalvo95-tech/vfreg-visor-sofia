@@ -79,6 +79,14 @@ release.
 - History source rows and their total are now read from the same SQLite snapshot,
   preventing live inserts from producing a misleading one-row truncation
   message while the simulator or factory collector is active.
+- Completed the Phase 6D workbook report with explicit start/end timestamps,
+  total and valid reading counts, editable-limit out-of-range formulas, and
+  separate estimated production-pause and disconnection durations.
+- Production pauses remain untouched in Raw Data. Voltage and current averages
+  exclude zero/near-zero pause values, while received frequency remains part of
+  its own average.
+- XLSX export now rejects selections beyond Excel's 1,048,575 data-row capacity
+  with smaller-period/CSV guidance; the collector continues running normally.
 
 ## 0.1.0-pilot-success — 2026-08-24
 

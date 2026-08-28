@@ -273,7 +273,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self.send_error_json(HTTPStatus.BAD_REQUEST, str(error))
                 return
             try:
-                from .exports import build_xlsx
+                from .exports import XlsxRowLimitError, build_xlsx
             except ModuleNotFoundError:
                 self.send_error_json(
                     HTTPStatus.SERVICE_UNAVAILABLE,
@@ -288,6 +288,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 return
             try:
                 path = Path(build_xlsx(cfg, start_time=start_time, end_time=end_time))
+            except XlsxRowLimitError as error:
+                self.send_error_json(
+                    HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                    str(error),
+                )
+                return
             except Exception as error:
                 self.send_error_json(
                     HTTPStatus.INTERNAL_SERVER_ERROR,
