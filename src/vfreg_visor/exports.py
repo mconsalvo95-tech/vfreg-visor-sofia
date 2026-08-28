@@ -178,7 +178,7 @@ def build_xlsx(
                 row.get("frequency_hz"),
             ]
         )
-        worksheet_row = readings_sheet.max_row
+        worksheet_row = exported_index + 1
         readings_sheet.cell(worksheet_row, 18, paused)
         readings_sheet.cell(worksheet_row, 19, valid)
     style_raw_data_sheet(readings_sheet)
