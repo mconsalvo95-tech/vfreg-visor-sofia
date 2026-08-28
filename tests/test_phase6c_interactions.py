@@ -83,6 +83,22 @@ class Phase6CInteractionTests(unittest.TestCase):
         self.assertIn("function setReportFormat", self.javascript)
         self.assertIn("elements.workbookPreview.hidden = !xlsx", self.javascript)
 
+    def test_xlsx_preview_matches_raw_data_and_report_workbook(self) -> None:
+        for element_id in (
+            "preview-average-voltage",
+            "preview-average-current",
+            "preview-average-frequency",
+            "report-preview-voltage",
+            "report-preview-current",
+            "report-preview-frequency",
+        ):
+            self.assertIn(f'id="{element_id}"', self.html)
+        for heading in ("Parámetro", "Mínimo", "Máximo", "Unidad", "Promedio"):
+            self.assertIn(heading, self.html)
+        self.assertIn("function positiveAverage", self.javascript)
+        self.assertIn("function renderWorkbookPreview", self.javascript)
+        self.assertIn("Raw Data + Reporte y gráficos", self.javascript)
+
     def test_chart_has_sparklines_modes_zoom_tooltip_and_reset(self) -> None:
         for element_id in (
             "voltage-sparkline",

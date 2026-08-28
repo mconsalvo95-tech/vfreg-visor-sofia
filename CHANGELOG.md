@@ -64,6 +64,14 @@ release.
 - History now treats 5/15/30/60 minutes as sampling intervals across the
   current workday, selecting the first real stored reading in each aligned
   interval instead of showing second-by-second rows from a recent-time window.
+- Redesigned management exports so CSV and XLSX use the clean Fecha, Hora,
+  Volts, mAmp, and Frec columns without connection status. XLSX now contains
+  Raw Data plus a Report worksheet with blank validated limit cells,
+  positive-reading averages, and separate Voltage, Current, and Frequency
+  charts whose limit lines appear only after both limits are entered.
+- Restored a live XLSX preview in Reports with the same parameter/limit table,
+  calculated averages, and three separate trend previews for the selected
+  period.
 - History sampling selections respond immediately, show a visible loading
   state, and supersede any automatic refresh already in progress. Trends and
   Reports retain their independent period behavior, and raw readings remain

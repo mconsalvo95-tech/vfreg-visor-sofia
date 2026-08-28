@@ -20,10 +20,11 @@ associate a measurement with an individual bird.
 - SQLite-backed history search with 5-, 15-, 30-, and 60-minute presets, today,
   or a custom From/To period. Clearing the filter returns immediately to live
   readings without pausing collection.
-- Management CSV and XLSX exports containing only Time, Volts, mAmp, Frec, and
-  Status, with no 5,000-record export cap. Active history filters also apply to
-  both downloads. XLSX contains Readings, a separate Charts worksheet, and
-  hidden sampled chart data; it does not add a summary sheet. Full technical
+- Management CSV and XLSX exports containing only Fecha, Hora, Volts, mAmp, and
+  Frec, with no 5,000-record export cap. Active report periods apply to both
+  downloads. XLSX opens on a separate Report worksheet with editable blank
+  minimum/maximum limits, positive-reading averages, and three charts; the
+  complete selected readings remain in Raw Data. Full connection and quality
   evidence stays in the SQLite database and raw JSONL journal.
 - In-place migration of databases created by the earlier prototype.
 

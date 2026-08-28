@@ -257,34 +257,34 @@ management exports without changing collection, storage, or device behavior.
 
 ### Phase 6D — CSV and XLSX export redesign
 
-- [ ] Provide clearly separated export scopes: **Historical data**,
+- [x] Provide clearly separated export scopes: **Historical data**,
   **Current workday**, and **Custom period**.
-- [ ] Make the selected scope, time period, format, and matching-record count
+- [x] Make the selected scope, time period, format, and matching-record count
   visible before download.
-- [ ] Keep CSV as a clean raw-data export with the columns `Fecha`, `Hora`,
+- [x] Keep CSV as a clean raw-data export with the columns `Fecha`, `Hora`,
   `Volts`, `mAmp`, and `Frec`, in that order. Do not add summary/footer rows.
-- [ ] Split timestamps into a sortable `Fecha` value formatted as `YYYY-MM-DD`
+- [x] Split timestamps into a sortable `Fecha` value formatted as `YYYY-MM-DD`
   and `Hora` formatted as `HH:mm:ss`.
-- [ ] Exclude connection status from management CSV/XLSX columns while keeping
+- [x] Exclude connection status from management CSV/XLSX columns while keeping
   the complete timestamp, connection state, and quality information in SQLite
   for internal diagnostics.
-- [ ] Generate one XLSX workbook with a **Raw Data** worksheet containing the
+- [x] Generate one XLSX workbook with a **Raw Data** worksheet containing the
   same selected raw readings as CSV and a separate **Report** worksheet.
-- [ ] In **Report**, provide the parameter names and units but leave the
+- [x] In **Report**, provide the parameter names and units but leave the
   minimum/maximum limit cells empty and visibly editable for employees.
-- [ ] Validate report limit inputs as numeric values and treat blanks as
+- [x] Validate report limit inputs as numeric values and treat blanks as
   **Not configured**, never as zero.
-- [ ] Calculate averages from positive readings only so missing/incomplete zero
+- [x] Calculate averages from positive readings only so missing/incomplete zero
   values do not distort the report.
 - [ ] Preserve production-pause readings in Raw Data. Exclude zero/near-zero
   Volts and mAmp from production averages while retaining received frequency,
   and report paused duration separately from disconnection time.
 - [ ] Add report start/end time, record counts, valid-reading counts, and
   per-parameter out-of-range counts.
-- [ ] Add separate Voltage, mAmp, and Frequency charts. Each chart must show the
+- [x] Add separate Voltage, mAmp, and Frequency charts. Each chart must show the
   measured series and display its minimum/maximum limit lines only after the
   employee configures both limits.
-- [ ] Keep formula/helper columns hidden and preserve all selected raw readings
+- [x] Keep formula/helper columns hidden and preserve all selected raw readings
   even when the Report excludes invalid readings from calculations.
 - [ ] Protect against Excel's 1,048,576-row worksheet limit by requiring a
   smaller range, splitting large XLSX history by period, or directing the user

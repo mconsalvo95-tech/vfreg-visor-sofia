@@ -57,6 +57,12 @@ const elements = {
   reportSummaryTitle: document.querySelector("#report-summary-title"),
   workbookPreview: document.querySelector("#workbook-preview"),
   previewReadingCount: document.querySelector("#preview-reading-count"),
+  previewAverageVoltage: document.querySelector("#preview-average-voltage"),
+  previewAverageCurrent: document.querySelector("#preview-average-current"),
+  previewAverageFrequency: document.querySelector("#preview-average-frequency"),
+  reportPreviewVoltage: document.querySelector("#report-preview-voltage"),
+  reportPreviewCurrent: document.querySelector("#report-preview-current"),
+  reportPreviewFrequency: document.querySelector("#report-preview-frequency"),
   exportStatus: document.querySelector("#export-status"),
   samplingForm: document.querySelector("#sampling-form"),
   pollInterval: document.querySelector("#poll-interval"),
@@ -464,6 +470,66 @@ function drawSparklines(readings) {
   drawSparkline(elements.frequencySparkline, readings, CHART_SERIES[2]);
 }
 
+function positiveAverage(readings, key) {
+  const values = readings
+    .filter((row) => isNumeric(row[key]) && Number(row[key]) > 0)
+    .map((row) => Number(row[key]));
+  if (!values.length) return null;
+  return values.reduce((total, value) => total + value, 0) / values.length;
+}
+
+function drawReportPreviewLine(canvas, readings, series) {
+  if (!canvas) return;
+  const numericRows = readings.filter((row) => isNumeric(row[series.key]));
+  const step = Math.max(1, Math.ceil(numericRows.length / 120));
+  const values = numericRows.filter((_row, index) => index % step === 0 || index === numericRows.length - 1)
+    .map((row) => Number(row[series.key]));
+  const bounds = canvas.getBoundingClientRect();
+  if (!bounds.width || !bounds.height) return;
+  const ratio = window.devicePixelRatio || 1;
+  canvas.width = Math.max(1, Math.floor(bounds.width * ratio));
+  canvas.height = Math.max(1, Math.floor(bounds.height * ratio));
+  const context = canvas.getContext("2d");
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  context.clearRect(0, 0, bounds.width, bounds.height);
+  context.strokeStyle = "#e3e9eb";
+  context.lineWidth = 1;
+  [0.25, 0.5, 0.75].forEach((position) => {
+    const y = bounds.height * position;
+    context.beginPath();
+    context.moveTo(0, y);
+    context.lineTo(bounds.width, y);
+    context.stroke();
+  });
+  if (values.length < 2) return;
+  let minimum = Math.min(...values);
+  let maximum = Math.max(...values);
+  if (minimum === maximum) { minimum -= 1; maximum += 1; }
+  context.strokeStyle = series.color;
+  context.lineWidth = 2;
+  context.beginPath();
+  values.forEach((value, index) => {
+    const x = 3 + (index / (values.length - 1)) * (bounds.width - 6);
+    const y = bounds.height - 5 - ((value - minimum) / (maximum - minimum)) * (bounds.height - 10);
+    if (index === 0) context.moveTo(x, y); else context.lineTo(x, y);
+  });
+  context.stroke();
+}
+
+function renderWorkbookPreview() {
+  const averages = [
+    [elements.previewAverageVoltage, positiveAverage(currentReadings, "voltage_v"), "V"],
+    [elements.previewAverageCurrent, positiveAverage(currentReadings, "current_ma"), "mA"],
+    [elements.previewAverageFrequency, positiveAverage(currentReadings, "frequency_hz"), "Hz"]
+  ];
+  averages.forEach(([element, average, unit]) => {
+    element.textContent = average === null ? "--" : `${number(average, 1)} ${unit}`;
+  });
+  drawReportPreviewLine(elements.reportPreviewVoltage, currentReadings, CHART_SERIES[0]);
+  drawReportPreviewLine(elements.reportPreviewCurrent, currentReadings, CHART_SERIES[1]);
+  drawReportPreviewLine(elements.reportPreviewFrequency, currentReadings, CHART_SERIES[2]);
+}
+
 function drawChart(readings) {
   const chartReadings = visibleChartReadings(readings);
   const canvas = elements.canvas;
@@ -597,6 +663,9 @@ function setView(view) {
     window.requestAnimationFrame(() => renderReadings(historyReadings));
     loadHistorySamples();
   }
+  if (view === "reports" && reportFormat === "xlsx") {
+    window.requestAnimationFrame(renderWorkbookPreview);
+  }
 }
 
 function localInputValue(date) {
@@ -645,11 +714,12 @@ function updateReportSummary() {
   elements.reportCount.textContent = currentRangeCount.toLocaleString("es-AR");
   elements.previewReadingCount.textContent = `${currentRangeCount.toLocaleString("es-AR")} filas del período seleccionado`;
   elements.reportFormat.textContent = xlsx ? "Excel + gráficos" : "CSV sin procesar";
-  elements.reportContent.textContent = xlsx ? "Lecturas + Gráficos" : "Fecha, Hora, Volts, mAmp y Frec";
+  elements.reportContent.textContent = xlsx ? "Raw Data + Reporte y gráficos" : "Fecha, Hora, Volts, mAmp y Frec";
   elements.reportSummaryTitle.textContent = activeRange.key === "workday"
     ? "Reporte de jornada actual"
     : activeRange.key === "history" ? "Reporte histórico completo" : "Reporte del período seleccionado";
   elements.workbookPreview.hidden = !xlsx;
+  if (xlsx && currentView === "reports") window.requestAnimationFrame(renderWorkbookPreview);
 }
 
 function updateExportLinks() {
@@ -1057,6 +1127,7 @@ window.addEventListener("resize", () => {
     drawChart(currentReadings);
     drawSparklines(latestStatusData?.readings || []);
   }
+  if (currentView === "reports" && reportFormat === "xlsx") renderWorkbookPreview();
 });
 
 updateClock();

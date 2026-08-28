@@ -286,18 +286,36 @@
       <section class="panel workbook-preview" id="workbook-preview" aria-labelledby="workbook-preview-title">
         <div class="panel-header">
           <div><p class="eyebrow">Vista previa</p><h2 id="workbook-preview-title">Contenido del archivo Excel</h2></div>
-          <div class="sheet-tabs"><span>Lecturas</span><span class="is-active">Gráficos</span></div>
+          <div class="sheet-tabs"><span>Raw Data</span><span class="is-active">Report</span></div>
         </div>
         <div class="report-preview-grid">
-          <div class="preview-sheet">
-            <strong>Hoja Lecturas</strong>
-            <p>Fecha · Hora · Volts · mAmp · Frec</p>
-            <small id="preview-reading-count">0 filas del período seleccionado</small>
+          <div class="preview-workbook-summary">
+            <div class="preview-sheet">
+              <strong>Hoja Raw Data</strong>
+              <p>Fecha · Hora · Volts · mAmp · Frec</p>
+              <small id="preview-reading-count">0 filas del período seleccionado</small>
+            </div>
+            <div class="preview-parameters">
+              <div class="preview-section-heading">
+                <strong>Parámetros y límites</strong>
+                <small>Los límites quedan vacíos para completar en Excel.</small>
+              </div>
+              <div class="preview-table-wrap">
+                <table aria-label="Vista previa de parámetros, límites y promedios">
+                  <thead><tr><th>Parámetro</th><th>Mínimo</th><th>Máximo</th><th>Unidad</th><th>Promedio</th></tr></thead>
+                  <tbody>
+                    <tr><td>Voltaje</td><td class="editable-empty" aria-label="Sin configurar"></td><td class="editable-empty" aria-label="Sin configurar"></td><td>V</td><td id="preview-average-voltage">--</td></tr>
+                    <tr><td>Miliamperios</td><td class="editable-empty" aria-label="Sin configurar"></td><td class="editable-empty" aria-label="Sin configurar"></td><td>mA</td><td id="preview-average-current">--</td></tr>
+                    <tr><td>Frecuencia</td><td class="editable-empty" aria-label="Sin configurar"></td><td class="editable-empty" aria-label="Sin configurar"></td><td>Hz</td><td id="preview-average-frequency">--</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
           <div class="preview-chart-list" aria-label="Gráficos incluidos">
-            <article><span class="preview-line voltage-line"></span><strong>Voltaje en el tiempo</strong></article>
-            <article><span class="preview-line current-line"></span><strong>Corriente en el tiempo</strong></article>
-            <article><span class="preview-line frequency-line"></span><strong>Frecuencia en el tiempo</strong></article>
+            <article><strong>Voltaje en el tiempo</strong><canvas id="report-preview-voltage" aria-label="Vista previa del gráfico de voltaje"></canvas><small>V</small></article>
+            <article><strong>Corriente en el tiempo</strong><canvas id="report-preview-current" aria-label="Vista previa del gráfico de corriente"></canvas><small>mA</small></article>
+            <article><strong>Frecuencia en el tiempo</strong><canvas id="report-preview-frequency" aria-label="Vista previa del gráfico de frecuencia"></canvas><small>Hz</small></article>
           </div>
         </div>
       </section>

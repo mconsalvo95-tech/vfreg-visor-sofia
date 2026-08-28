@@ -52,11 +52,11 @@ class Measurement:
 CSV_FIELDS = list(Measurement.__dataclass_fields__)
 
 MANAGER_EXPORT_COLUMNS = [
-    ("Time", "timestamp"),
+    ("Fecha", "timestamp_date"),
+    ("Hora", "timestamp_time"),
     ("Volts", "voltage_v"),
     ("mAmp", "current_ma"),
     ("Frec", "frequency_hz"),
-    ("Status", "connection_status"),
 ]
 
 
@@ -67,6 +67,27 @@ def format_manager_timestamp(value: Any) -> str:
         return datetime.fromisoformat(str(value)).strftime("%Y-%m-%dT%H:%M:%S")
     except (TypeError, ValueError):
         return str(value)
+
+
+def manager_timestamp_parts(value: Any) -> tuple[str, str]:
+    """Return sortable management-export date and time values with seconds."""
+    formatted = format_manager_timestamp(value)
+    try:
+        parsed = datetime.strptime(formatted, "%Y-%m-%dT%H:%M:%S")
+    except (TypeError, ValueError):
+        return formatted, ""
+    return parsed.strftime("%Y-%m-%d"), parsed.strftime("%H:%M:%S")
+
+
+def manager_export_values(row: dict[str, Any]) -> list[Any]:
+    date_value, time_value = manager_timestamp_parts(row.get("timestamp"))
+    return [
+        date_value,
+        time_value,
+        row.get("voltage_v"),
+        row.get("current_ma"),
+        row.get("frequency_hz"),
+    ]
 
 MEASUREMENT_COLUMNS = {
     "timestamp": "TEXT NOT NULL",
@@ -970,12 +991,5 @@ def export_csv(
         writer = csv.writer(handle)
         writer.writerow([heading for heading, _field in MANAGER_EXPORT_COLUMNS])
         for row in iter_measurements(path, start_time, end_time):
-            writer.writerow(
-                [
-                    format_manager_timestamp(row.get(field))
-                    if field == "timestamp"
-                    else row.get(field)
-                    for _heading, field in MANAGER_EXPORT_COLUMNS
-                ]
-            )
+            writer.writerow(manager_export_values(row))
     return destination

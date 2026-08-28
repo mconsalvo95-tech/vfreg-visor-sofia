@@ -122,12 +122,18 @@ Wireshark on the factory computer.
   expose a loading state while the table changes. Rows and totals come from one
   database snapshot so live inserts cannot make UI counts disagree. The
   complete suite passes 70 tests.
+- Phase 6D is partially implemented: management CSV/XLSX exports now split
+  Fecha and Hora, preserve seconds, omit connection status, and use the same
+  selected report period. XLSX contains only Raw Data and Report worksheets.
+  Report provides blank numeric-validated Min/Max cells, positive-reading
+  averages, and three separate charts with conditional limit lines. The
+  dashboard shows a matching live workbook preview before download.
 - The current-workday start is configured with
   `factory.production_start_time` and defaults to `06:00`.
 
 ## Next work
 
-Follow `PRODUCTION_READINESS_ROADMAP.md`. Review the Phase 6C chart/history
-interaction and then continue with Phase 6D export redesign. Keep the logo
-placeholder until approved brand assets are supplied, and keep the production
-Modbus path strictly read-only while that work proceeds.
+Follow `PRODUCTION_READINESS_ROADMAP.md`. Finish the remaining Phase 6D report
+metrics and large-XLSX row-limit handling, then continue to Phase 6E validation.
+Keep the logo placeholder until approved brand assets are supplied, and keep
+the production Modbus path strictly read-only while that work proceeds.

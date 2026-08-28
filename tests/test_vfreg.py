@@ -581,7 +581,7 @@ class StorageTests(unittest.TestCase):
             with open(csv_path, "r", encoding="utf-8") as handle:
                 lines = handle.readlines()
             self.assertEqual(len(lines), 5002)
-            self.assertEqual(lines[0].strip(), "Time,Volts,mAmp,Frec,Status")
+            self.assertEqual(lines[0].strip(), "Fecha,Hora,Volts,mAmp,Frec")
 
     def test_manager_csv_uses_human_readable_time(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -601,7 +601,8 @@ class StorageTests(unittest.TestCase):
             export_csv(sqlite_path, csv_path)
             with open(csv_path, "r", encoding="utf-8") as handle:
                 rows = list(csv.reader(handle))
-            self.assertEqual(rows[1][0], "2026-08-21T11:38:10")
+            self.assertEqual(rows[1][0], "2026-08-21")
+            self.assertEqual(rows[1][1], "11:38:10")
 
     def test_history_range_filters_sqlite_and_csv(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -628,7 +629,8 @@ class StorageTests(unittest.TestCase):
             with open(csv_path, "r", encoding="utf-8") as handle:
                 exported = list(csv.reader(handle))
             self.assertEqual(len(exported), 2)
-            self.assertEqual(exported[1][0], "2026-08-21T11:00:00")
+            self.assertEqual(exported[1][0], "2026-08-21")
+            self.assertEqual(exported[1][1], "11:00:00")
 
     def test_history_rows_and_count_share_one_database_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -769,7 +771,7 @@ class StatusTests(unittest.TestCase):
                     f"{base}/api/export.xlsx?{query}", timeout=3
                 ) as response:
                     workbook = load_workbook(BytesIO(response.read()))
-                self.assertEqual(workbook["Readings"].max_row, 2)
+                self.assertEqual(workbook["Raw Data"].max_row, 2)
 
                 invalid = urllib.parse.urlencode(
                     {"from": "2026-08-21T12:00:00", "to": "2026-08-21T11:00:00"}

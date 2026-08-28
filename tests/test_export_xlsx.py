@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
-from datetime import datetime
+from datetime import date, time
 
 from openpyxl import load_workbook
 
@@ -46,21 +46,36 @@ class XlsxExportTests(unittest.TestCase):
 
             self.assertEqual(
                 workbook.sheetnames,
-                ["Readings", "Charts", "Chart Data"],
+                ["Raw Data", "Report"],
             )
-            self.assertEqual(len(workbook["Charts"]._charts), 3)
-            self.assertEqual(workbook["Chart Data"].sheet_state, "hidden")
-            self.assertEqual(workbook["Readings"].max_row, 4)
+            self.assertEqual(workbook.active.title, "Report")
+            self.assertEqual(len(workbook["Report"]._charts), 3)
+            self.assertTrue(workbook["Raw Data"].column_dimensions["H"].hidden)
+            self.assertTrue(workbook["Raw Data"].column_dimensions["Q"].hidden)
+            self.assertEqual(workbook["Raw Data"].max_row, 4)
             self.assertEqual(
-                [cell.value for cell in workbook["Readings"][1]],
-                ["Time", "Volts", "mAmp", "Frec", "Status"],
+                [workbook["Raw Data"].cell(1, column).value for column in range(1, 6)],
+                ["Fecha", "Hora", "Volts", "mAmp", "Frec"],
             )
-            self.assertIsInstance(workbook["Readings"]["A2"].value, datetime)
-            self.assertEqual(workbook["Readings"]["A2"].value.microsecond, 0)
+            self.assertIsInstance(workbook["Raw Data"]["A2"].value, date)
+            self.assertIsInstance(workbook["Raw Data"]["B2"].value, time)
             self.assertEqual(
-                workbook["Readings"]["A2"].number_format,
-                'yyyy-mm-dd"T"hh:mm:ss',
+                workbook["Raw Data"]["A2"].number_format,
+                "yyyy-mm-dd",
             )
+            self.assertEqual(workbook["Raw Data"]["B2"].number_format, "hh:mm:ss")
+            self.assertEqual(workbook["Report"]["A5"].value, "Parámetro")
+            self.assertEqual(workbook["Report"]["E5"].value, "Promedio")
+            self.assertEqual(workbook["Report"]["A6"].value, "Voltaje")
+            self.assertIsNone(workbook["Report"]["B6"].value)
+            self.assertIsNone(workbook["Report"]["C6"].value)
+            self.assertIn("AVERAGEIF", workbook["Report"]["E6"].value)
+            self.assertIn('">0"', workbook["Report"]["E6"].value)
+            self.assertIn(
+                'OR(Report!$B$6="",Report!$C$6="")',
+                workbook["Raw Data"]["J2"].value,
+            )
+            self.assertEqual(len(workbook["Report"].data_validations.dataValidation), 1)
 
     def test_factory_export_respects_selected_time_period(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -85,8 +100,8 @@ class XlsxExportTests(unittest.TestCase):
                 end_time="2026-08-21T11:30:00.999999-03:00",
             )
             workbook = load_workbook(xlsx_path)
-            self.assertEqual(workbook["Readings"].max_row, 2)
-            self.assertEqual(workbook["Readings"]["A2"].value.hour, 11)
+            self.assertEqual(workbook["Raw Data"].max_row, 2)
+            self.assertEqual(workbook["Raw Data"]["B2"].value.hour, 11)
 
     def test_chart_sampling_preserves_first_and_last_rows(self) -> None:
         rows = sampled_row_numbers(60001, max_points=2000)
