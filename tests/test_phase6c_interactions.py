@@ -101,6 +101,8 @@ class Phase6CInteractionTests(unittest.TestCase):
         self.assertNotIn("Hoja Raw Data", self.html)
         self.assertIn(".preview-chart-list strong { text-align: center;", self.styles)
         self.assertIn(".preview-chart-list small { text-align: center;", self.styles)
+        self.assertIn(".preview-parameters th { padding: 8px 9px; text-align: center;", self.styles)
+        self.assertIn(".preview-parameters td { height: 30px; padding: 7px 9px; text-align: center;", self.styles)
 
     def test_chart_has_sparklines_modes_zoom_tooltip_and_reset(self) -> None:
         for element_id in (
