@@ -98,6 +98,9 @@ class Phase6CInteractionTests(unittest.TestCase):
         self.assertIn("function positiveAverage", self.javascript)
         self.assertIn("function renderWorkbookPreview", self.javascript)
         self.assertIn("Raw Data + Reporte y gráficos", self.javascript)
+        self.assertNotIn("Hoja Raw Data", self.html)
+        self.assertIn(".preview-chart-list strong { text-align: center;", self.styles)
+        self.assertIn(".preview-chart-list small { text-align: center;", self.styles)
 
     def test_chart_has_sparklines_modes_zoom_tooltip_and_reset(self) -> None:
         for element_id in (
