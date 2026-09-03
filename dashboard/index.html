@@ -269,6 +269,19 @@
           </div>
         </div>
 
+        <div class="report-step" id="chart-interval-step">
+          <div class="step-heading"><span>3</span><div><strong>Intervalo de los gráficos</strong><small>Define cuánto tiempo resume cada punto del gráfico</small></div></div>
+          <div class="chart-interval-options" role="radiogroup" aria-label="Intervalo de los gráficos exportados">
+            <button class="chart-interval-option is-selected" type="button" data-chart-export-interval="auto" role="radio" aria-checked="true">Automático</button>
+            <button class="chart-interval-option" type="button" data-chart-export-interval="1" role="radio" aria-checked="false">Cada 1 min</button>
+            <button class="chart-interval-option" type="button" data-chart-export-interval="5" role="radio" aria-checked="false">Cada 5 min</button>
+            <button class="chart-interval-option" type="button" data-chart-export-interval="10" role="radio" aria-checked="false">Cada 10 min</button>
+            <button class="chart-interval-option" type="button" data-chart-export-interval="15" role="radio" aria-checked="false">Cada 15 min</button>
+            <button class="chart-interval-option" type="button" data-chart-export-interval="30" role="radio" aria-checked="false">Cada 30 min</button>
+          </div>
+          <p class="chart-interval-help">Ejemplo: “Cada 5 min” crea un punto con el promedio de 12:00 a 12:04:59. Raw Data siempre conserva todas las lecturas. El eje muestra solo algunas horas para evitar superponer textos.</p>
+        </div>
+
         <aside class="download-summary" aria-label="Resumen de descarga">
           <p class="eyebrow">Resumen</p>
           <h2 id="report-summary-title">Reporte del período seleccionado</h2>
@@ -276,6 +289,7 @@
             <div><dt>Período</dt><dd id="export-period">Últimos 15 minutos</dd></div>
             <div><dt>Registros</dt><dd id="report-count">0</dd></div>
             <div><dt>Formato</dt><dd id="report-format">Excel + gráficos</dd></div>
+            <div id="chart-interval-summary-row"><dt>Gráficos</dt><dd id="chart-interval-summary">Automático</dd></div>
             <div><dt>Contenido</dt><dd id="report-content">Lecturas + Gráficos</dd></div>
           </dl>
           <a class="download-button primary-button" id="report-download" href="/api/export.xlsx" download>Descargar XLSX</a>

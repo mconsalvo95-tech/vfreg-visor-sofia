@@ -439,7 +439,11 @@ tr[data-quality="unverified"] .table-status::before { content: "?"; background: 
 .format-card small { color: var(--muted); font-size: 8px; line-height: 1.4; }
 .selection-mark { width: 20px; height: 20px; display: none; place-items: center; border-radius: 50%; background: var(--brand); color: #fff; font-size: 10px; }
 .format-card.is-selected .selection-mark { display: grid; }
-.download-summary { grid-column: 2; grid-row: 1 / span 2; padding: 18px; border-radius: 13px; background: linear-gradient(145deg, var(--navy-deep), var(--navy)); color: #fff; box-shadow: var(--shadow); }
+.chart-interval-options { display: grid; grid-template-columns: repeat(6, minmax(72px, 1fr)); gap: 7px; }
+.chart-interval-option { min-height: 39px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-soft); color: var(--muted); cursor: pointer; font-size: 9px; font-weight: 800; }
+.chart-interval-option:hover, .chart-interval-option.is-selected { border-color: #78bec5; background: var(--brand-soft); color: var(--navy); }
+.chart-interval-help { margin: 10px 0 0; color: var(--muted); font-size: 8px; line-height: 1.45; }
+.download-summary { grid-column: 2; grid-row: 1 / span 3; padding: 18px; border-radius: 13px; background: linear-gradient(145deg, var(--navy-deep), var(--navy)); color: #fff; box-shadow: var(--shadow); }
 .download-summary .eyebrow { color: #72d5dc; }
 .download-summary h2 { margin-bottom: 14px; font-size: 17px; }
 .download-summary dl { margin: 0 0 17px; display: grid; }
@@ -502,6 +506,7 @@ footer { width: min(1480px, 100%); min-height: 48px; margin: 0 auto; padding: 0 
   .page-heading { align-items: flex-start; }
   .reading-stamp, .page-count { justify-items: start; }
   .metric-grid, .scope-cards, .format-cards, .report-preview-grid, .preview-chart-list { grid-template-columns: 1fr; }
+  .chart-interval-options { grid-template-columns: repeat(3, minmax(72px, 1fr)); }
   .system-banner { grid-template-columns: auto 1fr; }
   .system-banner button { grid-column: 2; justify-self: start; }
   .process-strip { grid-template-columns: 1fr; gap: 4px; }

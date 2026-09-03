@@ -14,6 +14,7 @@ config.json
 
 # Runtime measurements, journals, logs, and exports
 data/
+outputs/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal

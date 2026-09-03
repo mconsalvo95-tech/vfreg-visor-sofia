@@ -104,6 +104,23 @@ class Phase6CInteractionTests(unittest.TestCase):
         self.assertIn(".preview-parameters th { padding: 8px 9px; text-align: center;", self.styles)
         self.assertIn(".preview-parameters td { height: 30px; padding: 7px 9px; text-align: center;", self.styles)
 
+    def test_xlsx_chart_interval_is_configurable_without_affecting_csv(self) -> None:
+        for value in ("auto", "1", "5", "10", "15", "30"):
+            self.assertIn(f'data-chart-export-interval="{value}"', self.html)
+        for element_id in (
+            "chart-interval-step",
+            "chart-interval-summary",
+            "chart-interval-summary-row",
+        ):
+            self.assertIn(f'id="{element_id}"', self.html)
+        self.assertIn('query.set("chart_interval_minutes", chartExportInterval)', self.javascript)
+        self.assertIn("function setChartExportInterval", self.javascript)
+        self.assertIn("function aggregateChartPreview", self.javascript)
+        self.assertIn('elements.chartIntervalStep.hidden = !xlsx', self.javascript)
+        self.assertIn("Define cuánto tiempo resume cada punto", self.html)
+        self.assertIn("Cada 5 min", self.html)
+        self.assertNotIn("bucket.paused", self.javascript)
+
     def test_chart_has_sparklines_modes_zoom_tooltip_and_reset(self) -> None:
         for element_id in (
             "voltage-sparkline",

@@ -87,6 +87,13 @@ release.
   its own average.
 - XLSX export now rejects selections beyond Excel's 1,048,575 data-row capacity
   with smaller-period/CSV guidance; the collector continues running normally.
+- Reports now offer Automatic, 1, 5, 10, 15, and 30-minute XLSX chart
+  resolution. Manual intervals chart bucket averages while retaining detected
+  production-pause points; Raw Data and all report calculations remain complete.
+- Improved Excel 2019 chart compatibility: hidden helper data now materializes
+  typed timestamps and measurements, charts opt into hidden-cell plotting, and
+  workbook objects are explicitly visible. Manual Excel/Google Sheets validation
+  remains an operational gate.
 
 ## 0.1.0-pilot-success — 2026-08-24
 

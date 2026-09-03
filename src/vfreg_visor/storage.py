@@ -10,7 +10,7 @@ import sqlite3
 import sys
 import threading
 import time
-from contextlib import closing
+from contextlib import closing, contextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -904,35 +904,67 @@ def fetch_sampled_interval(
     return [dict(row) for row in rows], source_count
 
 
+def _fetch_summary(
+    con: sqlite3.Connection,
+    start_time: str | None = None,
+    end_time: str | None = None,
+) -> dict[str, Any]:
+    where, parameters = _measurement_filter(start_time, end_time)
+    row = con.execute(
+        f"""
+        SELECT
+            COUNT(*) AS count,
+            SUM(CASE WHEN alarm_status = 'ALARM' THEN 1 ELSE 0 END) AS alarm_count,
+            SUM(CASE WHEN status = 'RAW_ONLY' THEN 1 ELSE 0 END) AS raw_only_count,
+            SUM(CASE WHEN status = 'PARTIAL' THEN 1 ELSE 0 END) AS partial_count,
+            SUM(CASE WHEN quality_flag IN ('INVALID', 'INCOMPLETE', 'OUT_OF_RANGE')
+                THEN 1 ELSE 0 END) AS quality_issue_count,
+            SUM(CASE WHEN quality_flag = 'UNVERIFIED' THEN 1 ELSE 0 END)
+                AS unverified_count,
+            COUNT(DISTINCT source_ip) AS source_count,
+            MIN(timestamp) AS first_timestamp,
+            MAX(timestamp) AS last_timestamp
+        FROM measurements
+        {where}
+        """,
+        parameters,
+    ).fetchone()
+    return dict(row)
+
+
 def fetch_summary(
     path: str,
     start_time: str | None = None,
     end_time: str | None = None,
 ) -> dict[str, Any]:
     init_sqlite(path)
-    where, parameters = _measurement_filter(start_time, end_time)
     with closing(connect_sqlite(path)) as con:
         con.row_factory = sqlite3.Row
-        row = con.execute(
-            f"""
-            SELECT
-                COUNT(*) AS count,
-                SUM(CASE WHEN alarm_status = 'ALARM' THEN 1 ELSE 0 END) AS alarm_count,
-                SUM(CASE WHEN status = 'RAW_ONLY' THEN 1 ELSE 0 END) AS raw_only_count,
-                SUM(CASE WHEN status = 'PARTIAL' THEN 1 ELSE 0 END) AS partial_count,
-                SUM(CASE WHEN quality_flag IN ('INVALID', 'INCOMPLETE', 'OUT_OF_RANGE')
-                    THEN 1 ELSE 0 END) AS quality_issue_count,
-                SUM(CASE WHEN quality_flag = 'UNVERIFIED' THEN 1 ELSE 0 END)
-                    AS unverified_count,
-                COUNT(DISTINCT source_ip) AS source_count,
-                MIN(timestamp) AS first_timestamp,
-                MAX(timestamp) AS last_timestamp
-            FROM measurements
-            {where}
-            """,
+        return _fetch_summary(con, start_time, end_time)
+
+
+@contextmanager
+def measurement_snapshot(
+    path: str,
+    start_time: str | None = None,
+    end_time: str | None = None,
+):
+    """Yield report metadata and rows from one consistent SQLite read snapshot."""
+    init_sqlite(path)
+    con = connect_sqlite(path)
+    con.row_factory = sqlite3.Row
+    where, parameters = _measurement_filter(start_time, end_time)
+    try:
+        con.execute("BEGIN")
+        summary = _fetch_summary(con, start_time, end_time)
+        cursor = con.execute(
+            f"SELECT {','.join(CSV_FIELDS)} FROM measurements{where} ORDER BY id",
             parameters,
-        ).fetchone()
-    return dict(row)
+        )
+        yield summary, (dict(row) for row in cursor)
+    finally:
+        con.rollback()
+        con.close()
 
 
 def fetch_events(path: str, limit: int = 50) -> list[dict[str, Any]]:

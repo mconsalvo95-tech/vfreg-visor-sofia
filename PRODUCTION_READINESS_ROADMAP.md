@@ -284,6 +284,10 @@ management exports without changing collection, storage, or device behavior.
 - [x] Add separate Voltage, mAmp, and Frequency charts. Each chart must show the
   measured series and display its minimum/maximum limit lines only after the
   employee configures both limits.
+- [x] Let operators choose Automatic, 1, 5, 10, 15, or 30-minute resolution
+  for exported XLSX charts. Keep Raw Data and report statistics complete,
+  average each manual time bucket, and preserve detected production-pause
+  points in the chart helper data.
 - [x] Keep formula/helper columns hidden and preserve all selected raw readings
   even when the Report excludes invalid readings from calculations.
 - [x] Protect against Excel's 1,048,576-row worksheet limit by requiring a

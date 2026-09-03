@@ -21,8 +21,9 @@ associate a measurement with an individual bird.
   or a custom From/To period. Clearing the filter returns immediately to live
   readings without pausing collection.
 - Management CSV and XLSX exports containing only Fecha, Hora, Volts, mAmp, and
-  Frec, with no 5,000-record export cap. Active report periods apply to both
-  downloads. XLSX opens on a separate Report worksheet with editable blank
+  Frec, with no 5,000-record export cap. XLSX permits up to 100,000 readings
+  per request; CSV remains available for larger periods. Active report periods
+  apply to both downloads. XLSX opens on a separate Report worksheet with editable blank
   minimum/maximum limits, production-aware averages, report-period and reading
   counts, separate estimated pause/disconnection durations, dynamic
   out-of-range counts, and three charts. The complete selected readings remain

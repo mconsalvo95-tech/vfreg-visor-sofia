@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import concurrent.futures
 import json
 import os
 import socket
@@ -750,6 +751,7 @@ class StatusTests(unittest.TestCase):
                     "from": "2026-08-21T10:30:00",
                     "to": "2026-08-21T11:30:00",
                     "limit": 5000,
+                    "chart_interval_minutes": 5,
                 }
             )
             base = f"http://127.0.0.1:{server.server_port}"
@@ -772,6 +774,17 @@ class StatusTests(unittest.TestCase):
                 ) as response:
                     workbook = load_workbook(BytesIO(response.read()))
                 self.assertEqual(workbook["Raw Data"].max_row, 2)
+                self.assertEqual(workbook["Report"]["B4"].value, "Promedio cada 5 minutos")
+
+                invalid_chart_interval = urllib.parse.urlencode(
+                    {"chart_interval_minutes": 2}
+                )
+                with self.assertRaises(urllib.error.HTTPError) as chart_error:
+                    urllib.request.urlopen(
+                        f"{base}/api/export.xlsx?{invalid_chart_interval}",
+                        timeout=3,
+                    )
+                self.assertEqual(chart_error.exception.code, 400)
 
                 invalid = urllib.parse.urlencode(
                     {"from": "2026-08-21T12:00:00", "to": "2026-08-21T11:00:00"}
@@ -784,6 +797,61 @@ class StatusTests(unittest.TestCase):
                 server.server_close()
                 thread.join(timeout=2)
                 writer.close()
+
+    def test_concurrent_xlsx_downloads_use_distinct_streamed_temporary_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            cfg = {
+                "output_xlsx": os.path.join(directory, "readings.xlsx"),
+            }
+            server = DashboardServer(("127.0.0.1", 0), DashboardHandler)
+            server.cfg = cfg
+            destinations: list[Path] = []
+            destination_lock = threading.Lock()
+            started = threading.Barrier(2)
+
+            def fake_build_xlsx(
+                _cfg: dict,
+                output_path: str | None = None,
+                **kwargs: object,
+            ) -> str:
+                assert output_path is not None
+                with destination_lock:
+                    destinations.append(Path(output_path))
+                started.wait(timeout=5)
+                Path(output_path).write_bytes(
+                    f"report-{kwargs['chart_interval_minutes']}".encode("ascii")
+                )
+                return output_path
+
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}/api/export.xlsx"
+
+            def download(interval: int) -> bytes:
+                with urllib.request.urlopen(
+                    f"{base}?chart_interval_minutes={interval}", timeout=10
+                ) as response:
+                    return response.read()
+
+            try:
+                with (
+                    patch("vfreg_visor.exports.build_xlsx", side_effect=fake_build_xlsx),
+                    patch.object(
+                        Path,
+                        "read_bytes",
+                        side_effect=AssertionError("XLSX responses must stream files"),
+                    ),
+                    concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor,
+                ):
+                    results = list(executor.map(download, (1, 5)))
+                self.assertEqual(set(results), {b"report-1", b"report-5"})
+                self.assertEqual(len(destinations), 2)
+                self.assertEqual(len(set(destinations)), 2)
+                self.assertTrue(all(not path.exists() for path in destinations))
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
 
     def test_poll_interval_api_persists_and_applies_live(self) -> None:
         class FakeCollector:

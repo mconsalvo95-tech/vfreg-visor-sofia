@@ -54,6 +54,9 @@ const elements = {
   reportCount: document.querySelector("#report-count"),
   reportFormat: document.querySelector("#report-format"),
   reportContent: document.querySelector("#report-content"),
+  chartIntervalStep: document.querySelector("#chart-interval-step"),
+  chartIntervalSummaryRow: document.querySelector("#chart-interval-summary-row"),
+  chartIntervalSummary: document.querySelector("#chart-interval-summary"),
   reportSummaryTitle: document.querySelector("#report-summary-title"),
   workbookPreview: document.querySelector("#workbook-preview"),
   previewReadingCount: document.querySelector("#preview-reading-count"),
@@ -102,6 +105,7 @@ let activeRange = { key: "15m", minutes: 15, label: "Últimos 15 minutos", rolli
 let currentView = "live";
 let historyQuality = "all";
 let reportFormat = "xlsx";
+let chartExportInterval = "auto";
 let chartMode = "overview";
 let chartPoints = [];
 let rangeRequestId = 0;
@@ -516,6 +520,37 @@ function drawReportPreviewLine(canvas, readings, series) {
   context.stroke();
 }
 
+function aggregateChartPreview(readings) {
+  if (chartExportInterval === "auto") return readings;
+  const intervalMs = Number(chartExportInterval) * 60000;
+  if (!Number.isFinite(intervalMs) || intervalMs <= 0) return readings;
+  const buckets = new Map();
+  readings.forEach((reading) => {
+    const timestamp = new Date(reading.timestamp);
+    if (Number.isNaN(timestamp.getTime())) return;
+    const bucketTime = Math.floor(timestamp.getTime() / intervalMs) * intervalMs;
+    let bucket = buckets.get(bucketTime);
+    if (!bucket) {
+      bucket = { timestamp: bucketTime, sums: {}, counts: {}, paused: null };
+      buckets.set(bucketTime, bucket);
+    }
+    CHART_SERIES.forEach((series) => {
+      if (!isNumeric(reading[series.key])) return;
+      bucket.sums[series.key] = (bucket.sums[series.key] || 0) + Number(reading[series.key]);
+      bucket.counts[series.key] = (bucket.counts[series.key] || 0) + 1;
+    });
+  });
+  return [...buckets.values()].map((bucket) => {
+    const average = { timestamp: new Date(bucket.timestamp).toISOString() };
+    CHART_SERIES.forEach((series) => {
+      average[series.key] = bucket.counts[series.key]
+        ? bucket.sums[series.key] / bucket.counts[series.key]
+        : null;
+    });
+    return average;
+  });
+}
+
 function renderWorkbookPreview() {
   const averages = [
     [elements.previewAverageVoltage, positiveAverage(currentReadings, "voltage_v"), "V"],
@@ -525,9 +560,10 @@ function renderWorkbookPreview() {
   averages.forEach(([element, average, unit]) => {
     element.textContent = average === null ? "--" : `${number(average, 1)} ${unit}`;
   });
-  drawReportPreviewLine(elements.reportPreviewVoltage, currentReadings, CHART_SERIES[0]);
-  drawReportPreviewLine(elements.reportPreviewCurrent, currentReadings, CHART_SERIES[1]);
-  drawReportPreviewLine(elements.reportPreviewFrequency, currentReadings, CHART_SERIES[2]);
+  const chartReadings = aggregateChartPreview(currentReadings);
+  drawReportPreviewLine(elements.reportPreviewVoltage, chartReadings, CHART_SERIES[0]);
+  drawReportPreviewLine(elements.reportPreviewCurrent, chartReadings, CHART_SERIES[1]);
+  drawReportPreviewLine(elements.reportPreviewFrequency, chartReadings, CHART_SERIES[2]);
 }
 
 function drawChart(readings) {
@@ -699,6 +735,9 @@ function filterQuery() {
   const query = new URLSearchParams();
   if (range.from) query.set("from", range.from);
   if (range.to) query.set("to", range.to);
+  if (reportFormat === "xlsx" && chartExportInterval !== "auto") {
+    query.set("chart_interval_minutes", chartExportInterval);
+  }
   const encoded = query.toString();
   return encoded ? `?${encoded}` : "";
 }
@@ -714,6 +753,11 @@ function updateReportSummary() {
   elements.reportCount.textContent = currentRangeCount.toLocaleString("es-AR");
   elements.previewReadingCount.textContent = `${currentRangeCount.toLocaleString("es-AR")} filas del período seleccionado`;
   elements.reportFormat.textContent = xlsx ? "Excel + gráficos" : "CSV sin procesar";
+  elements.chartIntervalStep.hidden = !xlsx;
+  elements.chartIntervalSummaryRow.hidden = !xlsx;
+  elements.chartIntervalSummary.textContent = chartExportInterval === "auto"
+    ? "Automático"
+    : `Cada ${chartExportInterval} min`;
   elements.reportContent.textContent = xlsx ? "Raw Data + Reporte y gráficos" : "Fecha, Hora, Volts, mAmp y Frec";
   elements.reportSummaryTitle.textContent = activeRange.key === "workday"
     ? "Reporte de jornada actual"
@@ -1033,6 +1077,18 @@ function setReportFormat(format) {
   updateReportSummary();
 }
 
+function setChartExportInterval(value) {
+  const allowed = new Set(["auto", "1", "5", "10", "15", "30"]);
+  if (!allowed.has(value)) return;
+  chartExportInterval = value;
+  document.querySelectorAll("[data-chart-export-interval]").forEach((button) => {
+    const selected = button.dataset.chartExportInterval === value;
+    button.classList.toggle("is-selected", selected);
+    button.setAttribute("aria-checked", String(selected));
+  });
+  updateReportSummary();
+}
+
 document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
 document.querySelectorAll("[data-view-target]").forEach((button) => button.addEventListener("click", () => setView(button.dataset.viewTarget)));
 document.querySelectorAll("[data-go-reports]").forEach((button) => button.addEventListener("click", () => {
@@ -1049,6 +1105,9 @@ elements.reportDownload.addEventListener("click", (event) => {
 });
 elements.csvExport.addEventListener("click", () => setReportFormat("csv"));
 elements.xlsxExport.addEventListener("click", () => setReportFormat("xlsx"));
+document.querySelectorAll("[data-chart-export-interval]").forEach((button) => {
+  button.addEventListener("click", () => setChartExportInterval(button.dataset.chartExportInterval));
+});
 elements.pollInterval.addEventListener("change", () => updateSamplingEstimate(elements.pollInterval.value));
 elements.samplingForm.addEventListener("submit", savePollingInterval);
 elements.historyFilterForm.addEventListener("submit", submitHistoryFilter);
@@ -1134,6 +1193,7 @@ updateClock();
 setView("live");
 selectPresetButton();
 selectHistoryControls();
+setChartExportInterval("auto");
 setReportFormat("xlsx");
 updateExportLinks();
 refresh();
