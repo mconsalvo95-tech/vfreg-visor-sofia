@@ -66,7 +66,7 @@ internet connection.
 
 Application code is organized under `src/vfreg_visor/`. The supported source
 entry point is `vfreg-visor`; configuration, dashboard/API, device communication,
-storage, and exports are separate modules. Version `0.4.0.dev0` is reported by
+storage, and exports are separate modules. Version `0.4.0.dev1` is reported by
 the command line, backend status API, and dashboard footer.
 
 The portable `VFREG-VISOR-SOFIA.exe` opens the dashboard in the Windows default

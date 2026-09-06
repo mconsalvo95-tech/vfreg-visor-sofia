@@ -1,7 +1,7 @@
 # VFREG Visor — Project Handoff
 
-Last updated: 2026-08-25
-Current development version: `0.4.0.dev0`
+Last updated: 2026-09-06
+Current development version: `0.4.0.dev1`
 Production-readiness status: Phase 6B functional foundation implemented;
 approved company logo/icon assets and stakeholder review pending
 
