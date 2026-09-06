@@ -911,7 +911,7 @@ class StatusTests(unittest.TestCase):
                     f"http://127.0.0.1:{server.server_port}/api/status", timeout=3
                 ) as response:
                     status = json.load(response)
-                self.assertEqual(status["app_version"], "0.4.0.dev0")
+                self.assertEqual(status["app_version"], "0.4.0.dev1")
                 with urllib.request.urlopen(
                     f"http://127.0.0.1:{server.server_port}/", timeout=3
                 ) as response:
