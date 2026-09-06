@@ -1,0 +1,128 @@
+VFREG-VISOR-SOFIA - INICIO AUTOMATICO Y OPERACION DIARIA
+=========================================================
+
+Esta guia es para la PC dedicada del operador en planta. Complementa
+"LEEME-EMPRESA.txt" y la configuracion de red ya aprobada.
+
+CUENTA DEDICADA Y SESION DE WINDOWS
+------------------------------------
+- El colector portable debe instalarse en la carpeta extraida del ZIP, por
+  ejemplo C:\VFREG-VISOR-SOFIA.
+- La tarea programada se registra con la cuenta Windows del operador dedicado
+  (inicio de sesion interactivo).
+- Esa cuenta debe permanecer INICIADA en la PC. Bloquear la sesion con
+  Win+L esta permitido; apagar la PC o cerrar sesion impide el servicio
+  automatico hasta el proximo inicio de sesion.
+- No compartir la misma carpeta de despliegue entre dos PCs.
+
+INSTALAR O ACTUALIZAR
+---------------------
+1. Detener el colector en ejecucion (ver "Detener o reiniciar" mas abajo).
+2. Extraer la nueva version del ZIP en la carpeta acordada con soporte.
+3. Copiar el archivo config.factory.json y la carpeta data\factory de la
+   instalacion anterior si soporte indica conservar historial.
+4. Abrir PowerShell dentro de la carpeta extraida, con la cuenta del operador
+   dedicado ya iniciada.
+5. Validar sin cambios en Windows:
+
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install-VFREGScheduledTask.ps1 -ValidateOnly
+
+6. Registrar o actualizar la tarea:
+
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install-VFREGScheduledTask.ps1
+
+Si Windows muestra "Acceso denegado", repetir el paso 6 estando conectado con
+la cuenta del operador dedicado o solicitar a IT permiso para crear tareas
+para ese usuario. Normalmente no se requiere ejecutar como administrador.
+
+COMPORTAMIENTO AUTOMATICO
+-------------------------
+La tarea "VFREG-VISOR-SOFIA" hace lo siguiente:
+
+- Todos los dias a las 05:50 intenta iniciar el colector antes del arranque de
+  produccion (06:00).
+- Tambien al iniciar sesion del operador dedicado (por ejemplo despues de un
+  reinicio de Windows).
+- Si el horario se perdio, Windows intenta ejecutar la tarea en cuanto sea
+  posible (StartWhenAvailable).
+- Donde la politica de la empresa lo permita, puede despertar la PC para
+  ejecutar la tarea (WakeToRun).
+- Si el colector falla al arrancar, Windows reintenta un numero limitado de
+  veces antes de esperar al siguiente disparador.
+- Si el colector ya esta en ejecucion, la tarea no abre una segunda copia
+  (MultipleInstances=IgnoreNew). El propio colector tambien rechaza una
+  segunda instancia en la misma carpeta.
+
+El colector puede iniciar antes de que el VFREG/NT1-B este encendido o
+alcanzable; reconectara automaticamente cuando el equipo este disponible.
+
+INICIO MANUAL (OPERADOR)
+------------------------
+Para abrir el tablero en el navegador durante la jornada:
+
+  Doble clic en "Start VFREG Visor.bat"
+
+O desde PowerShell en la carpeta de despliegue:
+
+  & ".\VFREG-VISOR-SOFIA.exe" --config ".\config.factory.json"
+
+Luego abrir http://127.0.0.1:8000 si el navegador no se abrio solo.
+
+DETENER O REINICIAR DE FORMA SEGURA
+-----------------------------------
+Detener:
+1. Localizar la ventana de consola "VFREG-VISOR-SOFIA" o "VFREG Visor".
+2. Presionar Ctrl+C una vez y esperar el mensaje de cierre ordenado.
+3. No usar "Finalizar tarea" del Administrador de tareas salvo indicacion de
+   soporte.
+
+Reiniciar:
+1. Detener como arriba.
+2. Iniciar de nuevo con "Start VFREG Visor.bat" o esperar la proxima ejecucion
+   de la tarea programada / el siguiente inicio de sesion.
+
+Durante mantenimiento de base de datos o respaldos, soporte puede pedir que el
+colector permanezca detenido; seguir siempre sus instrucciones.
+
+MENSAJE DE INSTANCIA DUPLICADA
+------------------------------
+Si aparece un error similar a:
+
+  "Another VFREG collector is already using ..."
+
+significa que el colector ya esta activo en esa carpeta. No iniciar otra copia.
+Verificar el tablero en http://127.0.0.1:8000 o el estado en /api/status.
+
+VERIFICAR ESTADO, TABLERO Y REGISTROS
+-------------------------------------
+- Tablero local: http://127.0.0.1:8000
+- Estado tecnico (misma PC): http://127.0.0.1:8000/api/status
+  Revise connection_state, health.collector, health.storage y
+  health.readings antes de escalar.
+- Registro operativo: data\factory\vfreg.log (lineas JSON con format_version,
+  fecha, severidad y componente).
+- Mediciones: data\factory\readings.sqlite y journal data\factory\raw_packets.jsonl
+
+Si el tablero no responde pero la consola sigue abierta, anotar la hora y
+contactar soporte; no modificar archivos internos del colector.
+
+QUITAR LA TAREA PROGRAMADA
+--------------------------
+Desde PowerShell en la carpeta de despliegue, con la misma cuenta que la registro:
+
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install-VFREGScheduledTask.ps1 -Remove
+
+Esto elimina la tarea "VFREG-VISOR-SOFIA" sin borrar mediciones ni configuracion.
+
+ESCALAMIENTO A SOPORTE
+----------------------
+Contactar soporte/IT cuando:
+- Ctrl+C no cierra el colector en unos segundos.
+- /api/status muestra errores persistentes de almacenamiento o conexion despues
+  de confirmar cable Ethernet y ping 192.168.1.7.
+- La tarea programada no se registra por permisos de Windows.
+- Se requiere mover la instalacion a otra PC o restaurar un respaldo.
+
+Informacion util para soporte: hora del incidente, captura de /api/status,
+ultimas lineas de data\factory\vfreg.log y confirmacion de que la sesion del
+operador dedicado estaba iniciada (bloqueada o no).

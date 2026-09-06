@@ -45,6 +45,10 @@ Opcion simple:
 
   Doble clic en "Start VFREG Visor.bat"
 
+Para inicio automatico diario (05:50) y al iniciar sesion del operador dedicado,
+ver "GUIA-OPERADOR-INICIO-AUTOMATICO.txt" y el script
+"Install-VFREGScheduledTask.ps1".
+
 O desde PowerShell abierto dentro de esta carpeta:
 
   & ".\VFREG-VISOR-SOFIA.exe" --config ".\config.factory.json"

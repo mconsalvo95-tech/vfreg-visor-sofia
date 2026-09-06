@@ -1,12 +1,38 @@
 from __future__ import annotations
 
+import json
 import logging
+from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
 
 LOGGER_NAME = "vfreg"
+
+
+class StructuredLogFormatter(logging.Formatter):
+    """Emit one JSON object per line for machine-parseable operational logs."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        component = record.name
+        if component.startswith(f"{LOGGER_NAME}."):
+            component = component[len(LOGGER_NAME) + 1 :]
+        payload: dict[str, Any] = {
+            "format_version": 1,
+            "timestamp": datetime.fromtimestamp(
+                record.created, tz=timezone.utc
+            )
+            .astimezone()
+            .isoformat(timespec="milliseconds"),
+            "severity": record.levelname,
+            "logger": record.name,
+            "component": component,
+            "message": record.getMessage(),
+        }
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
+        return json.dumps(payload, ensure_ascii=False)
 
 
 def configure_operational_logging(cfg: dict[str, Any]) -> logging.Logger:
@@ -28,12 +54,7 @@ def configure_operational_logging(cfg: dict[str, Any]) -> logging.Logger:
         backupCount=int(storage.get("application_log_backups", 5)),
         encoding="utf-8",
     )
-    handler.setFormatter(
-        logging.Formatter(
-            "%(asctime)s %(levelname)s %(name)s %(message)s",
-            datefmt="%Y-%m-%dT%H:%M:%S%z",
-        )
-    )
+    handler.setFormatter(StructuredLogFormatter())
     logger.addHandler(handler)
     return logger
 

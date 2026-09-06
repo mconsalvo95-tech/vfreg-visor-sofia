@@ -352,27 +352,34 @@ Goal: Operate unattended on the factory PC.
 - [ ] Verify automatic reconnection after the Ethernet cable is disconnected.
 - [ ] Verify automatic reconnection after the NT1-B is rebooted.
 - [ ] Verify recovery after Windows sleep or network-adapter reset.
-- [ ] Add graceful shutdown and confirm queued records are flushed.
-- [ ] Add health information for the collector, storage writer, and last valid
+- [x] Add graceful shutdown and confirm queued records are flushed.
+- [x] Add health information for the collector, storage writer, and last valid
   reading.
-- [ ] Add structured operational logs with timestamps and severity.
-- [ ] Use Windows Task Scheduler for the initial unattended deployment and
+- [x] Add structured operational logs with timestamps and severity.
+- [x] Use Windows Task Scheduler for the initial unattended deployment and
   provide an installation script that creates or updates the task safely.
 - [ ] Start the collector every day at `05:50` so it is ready before production
-  begins at `06:00`.
+  begins at `06:00` (task definition sets 05:50 locally; factory PC trigger not
+  yet verified).
 - [ ] Configure **Run task as soon as possible after a scheduled start is
   missed** and **Wake the computer to run this task** where company policy
-  permits it.
+  permits it (script sets both; factory PC validation pending).
 - [ ] Add a Windows startup or user-logon trigger so a restart also returns the
-  collector to service without waiting until the following day.
+  collector to service without waiting until the following day (logon trigger
+  configured in script locally; production restart behavior not yet verified).
 - [ ] Document that the initial portable deployment requires the dedicated
-  Windows operator account to remain signed in; locking the session is allowed.
+  Windows operator account to remain signed in; locking the session is allowed
+  (documented in operator runbook; locked-session operation not yet verified on
+  factory PC).
 - [ ] Keep reconnecting safely when the task starts before the VFREG/NT1-B is
   powered or reachable.
-- [ ] Avoid opening duplicate dashboard or collector processes.
+- [ ] Avoid opening duplicate dashboard or collector processes (IgnoreNew and
+  single-instance lock configured locally; duplicate scheduled-task runtime not
+  yet verified on factory PC).
 - [ ] Configure the scheduled task to keep the existing instance instead of
-  launching another one when the collector is already running.
-- [ ] Provide a safe manual stop/restart procedure.
+  launching another one when the collector is already running (IgnoreNew in the
+  delivered script; production duplicate-run behavior not yet verified).
+- [x] Provide a safe manual stop/restart procedure.
 
 ### Acceptance criteria
 

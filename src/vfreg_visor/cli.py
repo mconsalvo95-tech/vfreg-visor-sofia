@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import errno
+import logging
 import sys
 import threading
 import webbrowser
@@ -31,6 +32,11 @@ class StartupError(RuntimeError):
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the VFREG collector and dashboard")
     parser.add_argument("--config", default=str(default_config_path()))
+    parser.add_argument(
+        "--no-browser",
+        action="store_true",
+        help="Do not open the dashboard in a browser (for scheduled or unattended starts)",
+    )
     parser.add_argument("--version", action="version", version=f"VFREG Visor {__version__}")
     return parser.parse_args(argv)
 
@@ -48,6 +54,62 @@ def _create_dashboard_server(host: str, port: int) -> DashboardServer:
                 "then retry. If no application is using it, ask IT to check Windows permissions."
             ) from error
         raise StartupError(f"Dashboard could not bind to {host}:{port}: {error}") from error
+
+
+def _graceful_shutdown(
+    *,
+    collector,
+    server: DashboardServer,
+    writer: StorageWriter | None,
+    logger: logging.Logger,
+    serve_thread: threading.Thread,
+    shutdown_timeout: float = 5.0,
+) -> None:
+    """Stop collection, drain HTTP handlers, then checkpoint storage.
+
+    Every stage runs even when an earlier stage fails. The first failure is
+    retained and re-raised after cleanup so socket close and final logging still
+    happen when storage shutdown fails.
+    """
+    primary_error: BaseException | None = None
+
+    def _record_stage_error(stage: str, error: BaseException) -> None:
+        nonlocal primary_error
+        if primary_error is None:
+            primary_error = error
+        try:
+            logger.error("Shutdown stage %s failed: %s", stage, error)
+        except Exception:
+            pass
+
+    if collector is not None:
+        try:
+            collector.stop()
+        except BaseException as error:
+            _record_stage_error("collector", error)
+
+    try:
+        if serve_thread.is_alive():
+            # shutdown() must not run on the thread blocked in serve_forever().
+            server.shutdown()
+            serve_thread.join(timeout=shutdown_timeout)
+        server.server_close()
+    except BaseException as error:
+        _record_stage_error("dashboard", error)
+
+    if writer is not None:
+        try:
+            writer.close(timeout=shutdown_timeout)
+        except BaseException as error:
+            _record_stage_error("storage", error)
+
+    try:
+        logger.info("VFREG Visor stopped")
+    except Exception:
+        pass
+
+    if primary_error is not None:
+        raise primary_error
 
 
 def open_dashboard(
@@ -82,6 +144,7 @@ def run(
         server = _create_dashboard_server(host, port)
         writer: StorageWriter | None = None
         collector = None
+        serve_thread: threading.Thread | None = None
         try:
             storage_cfg = cfg.get("storage", {})
             writer = StorageWriter(
@@ -153,17 +216,35 @@ def run(
                 )
                 browser_timer.daemon = True
                 browser_timer.start()
+            serve_thread = threading.Thread(
+                target=server.serve_forever,
+                name="vfreg-dashboard",
+                daemon=False,
+            )
+            serve_thread.start()
             try:
-                server.serve_forever()
+                serve_thread.join()
             except KeyboardInterrupt:
                 print("\nStopping VFREG dashboard.")
         finally:
-            if collector is not None:
-                collector.stop()
-            if writer is not None:
-                writer.close()
-            server.server_close()
-            logger.info("VFREG Visor stopped")
+            if serve_thread is not None:
+                _graceful_shutdown(
+                    collector=collector,
+                    server=server,
+                    writer=writer,
+                    logger=logger,
+                    serve_thread=serve_thread,
+                )
+            else:
+                if collector is not None:
+                    collector.stop()
+                if writer is not None:
+                    writer.close()
+                server.server_close()
+                try:
+                    logger.info("VFREG Visor stopped")
+                except Exception:
+                    pass
 
 
 def main(
@@ -173,7 +254,10 @@ def main(
 ) -> int:
     args = parse_args(argv)
     try:
-        run(args.config, open_browser=open_browser)
+        run(
+            args.config,
+            open_browser=open_browser and not args.no_browser,
+        )
     except (ConfigError, InstanceAlreadyRunning, StartupError, StorageError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 2

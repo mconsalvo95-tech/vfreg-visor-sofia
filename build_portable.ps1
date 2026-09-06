@@ -56,6 +56,8 @@ $packageRoot = Join-Path $DistRoot "VFREG-VISOR-SOFIA"
 Copy-Item -LiteralPath (Join-Path $projectRoot "config.factory.json") -Destination $packageRoot -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "portable\Start VFREG Visor.bat") -Destination $packageRoot -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "portable\LEEME-EMPRESA.txt") -Destination $packageRoot -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot "portable\Install-VFREGScheduledTask.ps1") -Destination $packageRoot -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot "portable\GUIA-OPERADOR-INICIO-AUTOMATICO.txt") -Destination $packageRoot -Force
 New-Item -ItemType Directory -Force -Path (Join-Path $packageRoot "data\factory") | Out-Null
 
 $executable = Join-Path $packageRoot "VFREG-VISOR-SOFIA.exe"
