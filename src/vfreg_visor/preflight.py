@@ -116,7 +116,7 @@ def run_preflight(config_path: str | Path) -> dict[str, Any]:
     now = datetime.now().astimezone()
     checks.append(result("clock", "PASS" if now.utcoffset() is not None else "WARN", now.isoformat(timespec="seconds"), timestamp=now.isoformat()))
 
-    for module in ("openpyxl",):
+    for module in ("xlsxwriter",):
         installed = importlib.util.find_spec(module) is not None
         checks.append(result(f"dependency_{module}", "PASS" if installed else "WARN", "Installed" if installed else "Missing; collection and CSV still work, but XLSX export requires install_dependencies.bat"))
 

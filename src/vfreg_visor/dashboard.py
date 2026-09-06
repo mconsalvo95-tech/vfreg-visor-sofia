@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import shutil
 import sys
+import tempfile
 from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -21,6 +23,8 @@ from .storage import (
     export_csv,
     fetch_events,
     fetch_recent,
+    fetch_recent_with_count,
+    fetch_sampled_interval,
     fetch_summary,
 )
 
@@ -67,6 +71,23 @@ def parse_time_range(query: dict[str, list[str]]) -> tuple[str | None, str | Non
     )
 
 
+def parse_chart_interval(query: dict[str, list[str]]) -> int | None:
+    raw = query.get("chart_interval_minutes", ["auto"])[0].strip().lower()
+    if raw in {"", "auto", "automatic"}:
+        return None
+    try:
+        interval = int(raw)
+    except ValueError as error:
+        raise ValueError(
+            "Chart interval must be Automatic, 1, 5, 10, 15, or 30 minutes"
+        ) from error
+    if interval not in (1, 5, 10, 15, 30):
+        raise ValueError(
+            "Chart interval must be Automatic, 1, 5, 10, 15, or 30 minutes"
+        )
+    return interval
+
+
 class DashboardServer(ThreadingHTTPServer):
     cfg: dict
     config_path: str
@@ -94,6 +115,29 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
         self.end_headers()
         self.wfile.write(body)
+
+    def send_file(
+        self,
+        path: Path,
+        content_type: str,
+        filename: str | None = None,
+        *,
+        delete_after: bool = False,
+    ) -> None:
+        try:
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(path.stat().st_size))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            if filename:
+                self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+            self.end_headers()
+            with path.open("rb") as source:
+                shutil.copyfileobj(source, self.wfile, length=64 * 1024)
+        finally:
+            if delete_after:
+                path.unlink(missing_ok=True)
 
     def send_json(self, data: object) -> None:
         self.send_bytes(
@@ -197,14 +241,46 @@ class DashboardHandler(BaseHTTPRequestHandler):
             except ValueError as error:
                 self.send_error_json(HTTPStatus.BAD_REQUEST, str(error))
                 return
+            sample_minutes_raw = query.get("sample_minutes", [None])[0]
+            if sample_minutes_raw is not None:
+                try:
+                    sample_minutes = int(sample_minutes_raw)
+                except ValueError:
+                    self.send_error_json(
+                        HTTPStatus.BAD_REQUEST, "sample_minutes must be 5, 15, 30, or 60"
+                    )
+                    return
+                if sample_minutes not in (5, 15, 30, 60):
+                    self.send_error_json(
+                        HTTPStatus.BAD_REQUEST, "sample_minutes must be 5, 15, 30, or 60"
+                    )
+                    return
+                if not start_time or not end_time:
+                    self.send_error_json(
+                        HTTPStatus.BAD_REQUEST, "sampled history requires from and to"
+                    )
+                    return
+                readings, source_count = fetch_sampled_interval(
+                    cfg["output_sqlite"], sample_minutes, start_time, end_time
+                )
+                self.send_json(
+                    {
+                        "readings": readings,
+                        "count": len(readings),
+                        "source_count": source_count,
+                        "sample_minutes": sample_minutes,
+                        "from": start_time,
+                        "to": end_time,
+                    }
+                )
+                return
+            readings, count = fetch_recent_with_count(
+                cfg["output_sqlite"], limit, start_time, end_time
+            )
             self.send_json(
                 {
-                    "readings": fetch_recent(
-                        cfg["output_sqlite"], limit, start_time, end_time
-                    ),
-                    "count": fetch_summary(
-                        cfg["output_sqlite"], start_time, end_time
-                    )["count"],
+                    "readings": readings,
+                    "count": count,
                     "from": start_time,
                     "to": end_time,
                 }
@@ -233,17 +309,19 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/api/export.xlsx":
+            query = parse_qs(parsed.query)
             try:
-                start_time, end_time = parse_time_range(parse_qs(parsed.query))
+                start_time, end_time = parse_time_range(query)
+                chart_interval_minutes = parse_chart_interval(query)
             except ValueError as error:
                 self.send_error_json(HTTPStatus.BAD_REQUEST, str(error))
                 return
             try:
-                from .exports import build_xlsx
+                from .exports import ChartPointLimitError, XlsxRowLimitError, build_xlsx
             except ModuleNotFoundError:
                 self.send_error_json(
                     HTTPStatus.SERVICE_UNAVAILABLE,
-                    "XLSX export requires openpyxl; run install_dependencies.bat",
+                    "XLSX export requires XlsxWriter; run install_dependencies.bat",
                 )
                 return
             except ImportError as error:
@@ -252,18 +330,52 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     f"Collector modules changed; restart the collector before exporting XLSX: {error}",
                 )
                 return
+            output_directory = Path(cfg.get("output_xlsx", "data/readings.xlsx")).resolve().parent
+            output_directory.mkdir(parents=True, exist_ok=True)
+            temporary = tempfile.NamedTemporaryFile(
+                prefix="vfreg-report-",
+                suffix=".xlsx",
+                dir=output_directory,
+                delete=False,
+            )
+            temporary_path = Path(temporary.name)
+            temporary.close()
             try:
-                path = Path(build_xlsx(cfg, start_time=start_time, end_time=end_time))
+                path = Path(
+                    build_xlsx(
+                        cfg,
+                        output_path=str(temporary_path),
+                        start_time=start_time,
+                        end_time=end_time,
+                        chart_interval_minutes=chart_interval_minutes,
+                    )
+                )
+            except (XlsxRowLimitError, ChartPointLimitError) as error:
+                temporary_path.unlink(missing_ok=True)
+                self.send_error_json(
+                    HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                    str(error),
+                )
+                return
             except Exception as error:
+                temporary_path.unlink(missing_ok=True)
                 self.send_error_json(
                     HTTPStatus.INTERNAL_SERVER_ERROR,
                     f"XLSX generation failed: {error}",
                 )
                 return
-            self.send_bytes(
-                path.read_bytes(),
+            if path.resolve() != temporary_path.resolve():
+                temporary_path.unlink(missing_ok=True)
+                self.send_error_json(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    "XLSX generation did not use its request-specific destination",
+                )
+                return
+            self.send_file(
+                path,
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 "vfreg-readings.xlsx",
+                delete_after=True,
             )
             return
 

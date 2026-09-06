@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import concurrent.futures
 import json
 import os
 import socket
@@ -64,6 +65,8 @@ from vfreg_visor.storage import (  # noqa: E402
     create_sqlite_backup,
     export_csv,
     fetch_recent,
+    fetch_recent_with_count,
+    fetch_sampled_interval,
     fetch_summary,
     init_sqlite,
     insert_measurements,
@@ -579,7 +582,7 @@ class StorageTests(unittest.TestCase):
             with open(csv_path, "r", encoding="utf-8") as handle:
                 lines = handle.readlines()
             self.assertEqual(len(lines), 5002)
-            self.assertEqual(lines[0].strip(), "Time,Volts,mAmp,Frec,Status")
+            self.assertEqual(lines[0].strip(), "Fecha,Hora,Volts,mAmp,Frec")
 
     def test_manager_csv_uses_human_readable_time(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -599,7 +602,8 @@ class StorageTests(unittest.TestCase):
             export_csv(sqlite_path, csv_path)
             with open(csv_path, "r", encoding="utf-8") as handle:
                 rows = list(csv.reader(handle))
-            self.assertEqual(rows[1][0], "2026-08-21T11:38:10")
+            self.assertEqual(rows[1][0], "2026-08-21")
+            self.assertEqual(rows[1][1], "11:38:10")
 
     def test_history_range_filters_sqlite_and_csv(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -626,7 +630,46 @@ class StorageTests(unittest.TestCase):
             with open(csv_path, "r", encoding="utf-8") as handle:
                 exported = list(csv.reader(handle))
             self.assertEqual(len(exported), 2)
-            self.assertEqual(exported[1][0], "2026-08-21T11:00:00")
+            self.assertEqual(exported[1][0], "2026-08-21")
+            self.assertEqual(exported[1][1], "11:00:00")
+
+    def test_history_rows_and_count_share_one_database_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            sqlite_path = os.path.join(directory, "readings.sqlite")
+            for sequence in range(1, 4):
+                append_sqlite(
+                    sqlite_path,
+                    Measurement(
+                        f"2026-08-21T11:00:0{sequence}.000-03:00",
+                        "test",
+                        sequence,
+                        35,
+                        340,
+                        202,
+                    ),
+                )
+            rows, count = fetch_recent_with_count(sqlite_path, 2)
+            self.assertEqual(count, 3)
+            self.assertEqual([row["sequence"] for row in rows], [2, 3])
+
+    def test_history_sampling_uses_first_real_reading_in_each_workday_interval(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            sqlite_path = os.path.join(directory, "readings.sqlite")
+            start = datetime.fromisoformat("2026-08-21T06:00:00-03:00")
+            for sequence in range(15):
+                timestamp = (start + timedelta(minutes=sequence)).isoformat()
+                append_sqlite(
+                    sqlite_path,
+                    Measurement(timestamp, "test", sequence, 35, 340, 202),
+                )
+            rows, source_count = fetch_sampled_interval(
+                sqlite_path,
+                5,
+                start.isoformat(),
+                (start + timedelta(minutes=14, seconds=59)).isoformat(),
+            )
+            self.assertEqual(source_count, 15)
+            self.assertEqual([row["sequence"] for row in rows], [0, 5, 10])
 
 
 class StatusTests(unittest.TestCase):
@@ -708,6 +751,7 @@ class StatusTests(unittest.TestCase):
                     "from": "2026-08-21T10:30:00",
                     "to": "2026-08-21T11:30:00",
                     "limit": 5000,
+                    "chart_interval_minutes": 5,
                 }
             )
             base = f"http://127.0.0.1:{server.server_port}"
@@ -729,7 +773,18 @@ class StatusTests(unittest.TestCase):
                     f"{base}/api/export.xlsx?{query}", timeout=3
                 ) as response:
                     workbook = load_workbook(BytesIO(response.read()))
-                self.assertEqual(workbook["Readings"].max_row, 2)
+                self.assertEqual(workbook["Raw Data"].max_row, 2)
+                self.assertEqual(workbook["Report"]["B4"].value, "Promedio cada 5 minutos")
+
+                invalid_chart_interval = urllib.parse.urlencode(
+                    {"chart_interval_minutes": 2}
+                )
+                with self.assertRaises(urllib.error.HTTPError) as chart_error:
+                    urllib.request.urlopen(
+                        f"{base}/api/export.xlsx?{invalid_chart_interval}",
+                        timeout=3,
+                    )
+                self.assertEqual(chart_error.exception.code, 400)
 
                 invalid = urllib.parse.urlencode(
                     {"from": "2026-08-21T12:00:00", "to": "2026-08-21T11:00:00"}
@@ -742,6 +797,61 @@ class StatusTests(unittest.TestCase):
                 server.server_close()
                 thread.join(timeout=2)
                 writer.close()
+
+    def test_concurrent_xlsx_downloads_use_distinct_streamed_temporary_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            cfg = {
+                "output_xlsx": os.path.join(directory, "readings.xlsx"),
+            }
+            server = DashboardServer(("127.0.0.1", 0), DashboardHandler)
+            server.cfg = cfg
+            destinations: list[Path] = []
+            destination_lock = threading.Lock()
+            started = threading.Barrier(2)
+
+            def fake_build_xlsx(
+                _cfg: dict,
+                output_path: str | None = None,
+                **kwargs: object,
+            ) -> str:
+                assert output_path is not None
+                with destination_lock:
+                    destinations.append(Path(output_path))
+                started.wait(timeout=5)
+                Path(output_path).write_bytes(
+                    f"report-{kwargs['chart_interval_minutes']}".encode("ascii")
+                )
+                return output_path
+
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}/api/export.xlsx"
+
+            def download(interval: int) -> bytes:
+                with urllib.request.urlopen(
+                    f"{base}?chart_interval_minutes={interval}", timeout=10
+                ) as response:
+                    return response.read()
+
+            try:
+                with (
+                    patch("vfreg_visor.exports.build_xlsx", side_effect=fake_build_xlsx),
+                    patch.object(
+                        Path,
+                        "read_bytes",
+                        side_effect=AssertionError("XLSX responses must stream files"),
+                    ),
+                    concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor,
+                ):
+                    results = list(executor.map(download, (1, 5)))
+                self.assertEqual(set(results), {b"report-1", b"report-5"})
+                self.assertEqual(len(destinations), 2)
+                self.assertEqual(len(set(destinations)), 2)
+                self.assertTrue(all(not path.exists() for path in destinations))
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
 
     def test_poll_interval_api_persists_and_applies_live(self) -> None:
         class FakeCollector:
@@ -801,14 +911,14 @@ class StatusTests(unittest.TestCase):
                     f"http://127.0.0.1:{server.server_port}/api/status", timeout=3
                 ) as response:
                     status = json.load(response)
-                self.assertEqual(status["app_version"], "0.4.0.dev0")
+                self.assertEqual(status["app_version"], "0.4.0.dev1")
                 with urllib.request.urlopen(
                     f"http://127.0.0.1:{server.server_port}/", timeout=3
                 ) as response:
                     dashboard_html = response.read().decode("utf-8")
                 self.assertIn('id="app-version"', dashboard_html)
                 self.assertIn('id="history-filter-form"', dashboard_html)
-                self.assertIn(">Support</a>", dashboard_html)
+                self.assertIn(">Soporte</a>", dashboard_html)
                 with open(config_path, "r", encoding="utf-8") as handle:
                     saved = json.load(handle)
                 self.assertEqual(

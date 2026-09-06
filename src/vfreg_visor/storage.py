@@ -10,7 +10,7 @@ import sqlite3
 import sys
 import threading
 import time
-from contextlib import closing
+from contextlib import closing, contextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -52,11 +52,11 @@ class Measurement:
 CSV_FIELDS = list(Measurement.__dataclass_fields__)
 
 MANAGER_EXPORT_COLUMNS = [
-    ("Time", "timestamp"),
+    ("Fecha", "timestamp_date"),
+    ("Hora", "timestamp_time"),
     ("Volts", "voltage_v"),
     ("mAmp", "current_ma"),
     ("Frec", "frequency_hz"),
-    ("Status", "connection_status"),
 ]
 
 
@@ -67,6 +67,27 @@ def format_manager_timestamp(value: Any) -> str:
         return datetime.fromisoformat(str(value)).strftime("%Y-%m-%dT%H:%M:%S")
     except (TypeError, ValueError):
         return str(value)
+
+
+def manager_timestamp_parts(value: Any) -> tuple[str, str]:
+    """Return sortable management-export date and time values with seconds."""
+    formatted = format_manager_timestamp(value)
+    try:
+        parsed = datetime.strptime(formatted, "%Y-%m-%dT%H:%M:%S")
+    except (TypeError, ValueError):
+        return formatted, ""
+    return parsed.strftime("%Y-%m-%d"), parsed.strftime("%H:%M:%S")
+
+
+def manager_export_values(row: dict[str, Any]) -> list[Any]:
+    date_value, time_value = manager_timestamp_parts(row.get("timestamp"))
+    return [
+        date_value,
+        time_value,
+        row.get("voltage_v"),
+        row.get("current_ma"),
+        row.get("frequency_hz"),
+    ]
 
 MEASUREMENT_COLUMNS = {
     "timestamp": "TEXT NOT NULL",
@@ -797,7 +818,7 @@ def fetch_recent(
     end_time: str | None = None,
 ) -> list[dict[str, Any]]:
     init_sqlite(path)
-    safe_limit = max(1, min(int(limit), 5000))
+    safe_limit = max(1, min(int(limit), 10000))
     columns = ",".join(["id"] + CSV_FIELDS)
     where, parameters = _measurement_filter(start_time, end_time)
     with closing(connect_sqlite(path)) as con:
@@ -809,35 +830,141 @@ def fetch_recent(
     return [dict(row) for row in reversed(rows)]
 
 
+def fetch_recent_with_count(
+    path: str,
+    limit: int = 180,
+    start_time: str | None = None,
+    end_time: str | None = None,
+) -> tuple[list[dict[str, Any]], int]:
+    """Return rows and their total from one SQLite read snapshot."""
+    init_sqlite(path)
+    safe_limit = max(1, min(int(limit), 10000))
+    columns = ",".join(["id"] + CSV_FIELDS)
+    where, parameters = _measurement_filter(start_time, end_time)
+    with closing(connect_sqlite(path)) as con:
+        con.row_factory = sqlite3.Row
+        con.execute("BEGIN")
+        total = int(
+            con.execute(
+                f"SELECT COUNT(*) FROM measurements{where}", parameters
+            ).fetchone()[0]
+        )
+        rows = con.execute(
+            f"SELECT {columns} FROM measurements{where} ORDER BY id DESC LIMIT ?",
+            (*parameters, safe_limit),
+        ).fetchall()
+        con.rollback()
+    return [dict(row) for row in reversed(rows)], total
+
+
+def fetch_sampled_interval(
+    path: str,
+    interval_minutes: int,
+    start_time: str,
+    end_time: str,
+) -> tuple[list[dict[str, Any]], int]:
+    """Select the first real reading in each interval aligned to start_time."""
+    interval_seconds = int(interval_minutes) * 60
+    if interval_seconds <= 0:
+        raise ValueError("interval_minutes must be positive")
+    init_sqlite(path)
+    columns = ",".join(["id"] + CSV_FIELDS)
+    where, parameters = _measurement_filter(start_time, end_time)
+    with closing(connect_sqlite(path)) as con:
+        con.row_factory = sqlite3.Row
+        con.execute("BEGIN")
+        source_count = int(
+            con.execute(
+                f"SELECT COUNT(*) FROM measurements{where}", parameters
+            ).fetchone()[0]
+        )
+        rows = con.execute(
+            f"""
+            WITH bucketed AS (
+                SELECT {columns},
+                    CAST((unixepoch(timestamp) - unixepoch(?)) / ? AS INTEGER)
+                    AS sample_bucket
+                FROM measurements
+                {where}
+            ), ranked AS (
+                SELECT *, ROW_NUMBER() OVER (
+                    PARTITION BY sample_bucket ORDER BY timestamp ASC, id ASC
+                ) AS sample_rank
+                FROM bucketed
+            )
+            SELECT {columns}
+            FROM ranked
+            WHERE sample_rank = 1
+            ORDER BY id ASC
+            LIMIT 10000
+            """,
+            (start_time, interval_seconds, *parameters),
+        ).fetchall()
+        con.rollback()
+    return [dict(row) for row in rows], source_count
+
+
+def _fetch_summary(
+    con: sqlite3.Connection,
+    start_time: str | None = None,
+    end_time: str | None = None,
+) -> dict[str, Any]:
+    where, parameters = _measurement_filter(start_time, end_time)
+    row = con.execute(
+        f"""
+        SELECT
+            COUNT(*) AS count,
+            SUM(CASE WHEN alarm_status = 'ALARM' THEN 1 ELSE 0 END) AS alarm_count,
+            SUM(CASE WHEN status = 'RAW_ONLY' THEN 1 ELSE 0 END) AS raw_only_count,
+            SUM(CASE WHEN status = 'PARTIAL' THEN 1 ELSE 0 END) AS partial_count,
+            SUM(CASE WHEN quality_flag IN ('INVALID', 'INCOMPLETE', 'OUT_OF_RANGE')
+                THEN 1 ELSE 0 END) AS quality_issue_count,
+            SUM(CASE WHEN quality_flag = 'UNVERIFIED' THEN 1 ELSE 0 END)
+                AS unverified_count,
+            COUNT(DISTINCT source_ip) AS source_count,
+            MIN(timestamp) AS first_timestamp,
+            MAX(timestamp) AS last_timestamp
+        FROM measurements
+        {where}
+        """,
+        parameters,
+    ).fetchone()
+    return dict(row)
+
+
 def fetch_summary(
     path: str,
     start_time: str | None = None,
     end_time: str | None = None,
 ) -> dict[str, Any]:
     init_sqlite(path)
-    where, parameters = _measurement_filter(start_time, end_time)
     with closing(connect_sqlite(path)) as con:
         con.row_factory = sqlite3.Row
-        row = con.execute(
-            f"""
-            SELECT
-                COUNT(*) AS count,
-                SUM(CASE WHEN alarm_status = 'ALARM' THEN 1 ELSE 0 END) AS alarm_count,
-                SUM(CASE WHEN status = 'RAW_ONLY' THEN 1 ELSE 0 END) AS raw_only_count,
-                SUM(CASE WHEN status = 'PARTIAL' THEN 1 ELSE 0 END) AS partial_count,
-                SUM(CASE WHEN quality_flag IN ('INVALID', 'INCOMPLETE', 'OUT_OF_RANGE')
-                    THEN 1 ELSE 0 END) AS quality_issue_count,
-                SUM(CASE WHEN quality_flag = 'UNVERIFIED' THEN 1 ELSE 0 END)
-                    AS unverified_count,
-                COUNT(DISTINCT source_ip) AS source_count,
-                MIN(timestamp) AS first_timestamp,
-                MAX(timestamp) AS last_timestamp
-            FROM measurements
-            {where}
-            """,
+        return _fetch_summary(con, start_time, end_time)
+
+
+@contextmanager
+def measurement_snapshot(
+    path: str,
+    start_time: str | None = None,
+    end_time: str | None = None,
+):
+    """Yield report metadata and rows from one consistent SQLite read snapshot."""
+    init_sqlite(path)
+    con = connect_sqlite(path)
+    con.row_factory = sqlite3.Row
+    where, parameters = _measurement_filter(start_time, end_time)
+    try:
+        con.execute("BEGIN")
+        summary = _fetch_summary(con, start_time, end_time)
+        cursor = con.execute(
+            f"SELECT {','.join(CSV_FIELDS)} FROM measurements{where} ORDER BY id",
             parameters,
-        ).fetchone()
-    return dict(row)
+        )
+        yield summary, (dict(row) for row in cursor)
+    finally:
+        con.rollback()
+        con.close()
 
 
 def fetch_events(path: str, limit: int = 50) -> list[dict[str, Any]]:
@@ -896,12 +1023,5 @@ def export_csv(
         writer = csv.writer(handle)
         writer.writerow([heading for heading, _field in MANAGER_EXPORT_COLUMNS])
         for row in iter_measurements(path, start_time, end_time):
-            writer.writerow(
-                [
-                    format_manager_timestamp(row.get(field))
-                    if field == "timestamp"
-                    else row.get(field)
-                    for _heading, field in MANAGER_EXPORT_COLUMNS
-                ]
-            )
+            writer.writerow(manager_export_values(row))
     return destination

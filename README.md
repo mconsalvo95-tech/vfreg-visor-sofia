@@ -20,11 +20,16 @@ associate a measurement with an individual bird.
 - SQLite-backed history search with 5-, 15-, 30-, and 60-minute presets, today,
   or a custom From/To period. Clearing the filter returns immediately to live
   readings without pausing collection.
-- Management CSV and XLSX exports containing only Time, Volts, mAmp, Frec, and
-  Status, with no 5,000-record export cap. Active history filters also apply to
-  both downloads. XLSX contains Readings, a separate Charts worksheet, and
-  hidden sampled chart data; it does not add a summary sheet. Full technical
-  evidence stays in the SQLite database and raw JSONL journal.
+- Management CSV and XLSX exports containing only Fecha, Hora, Volts, mAmp, and
+  Frec, with no 5,000-record export cap. XLSX permits up to 100,000 readings
+  per request; CSV remains available for larger periods. Active report periods
+  apply to both downloads. XLSX opens on a separate Report worksheet with editable blank
+  minimum/maximum limits, production-aware averages, report-period and reading
+  counts, separate estimated pause/disconnection durations, dynamic
+  out-of-range counts, and three charts. The complete selected readings remain
+  in Raw Data. Oversized XLSX requests return clear smaller-period/CSV guidance
+  without interrupting collection. Full connection and quality evidence stays
+  in the SQLite database and raw JSONL journal.
 - In-place migration of databases created by the earlier prototype.
 
 Port `5000` and the simulated JSON message format remain test assumptions only
@@ -61,7 +66,7 @@ internet connection.
 
 Application code is organized under `src/vfreg_visor/`. The supported source
 entry point is `vfreg-visor`; configuration, dashboard/API, device communication,
-storage, and exports are separate modules. Version `0.4.0.dev0` is reported by
+storage, and exports are separate modules. Version `0.4.0.dev1` is reported by
 the command line, backend status API, and dashboard footer.
 
 The portable `VFREG-VISOR-SOFIA.exe` opens the dashboard in the Windows default

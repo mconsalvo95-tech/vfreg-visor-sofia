@@ -58,8 +58,11 @@ requires a new capacity review; one-second annual retention would need roughly
   measured gap duration.
 - Decoded rows carry a backend quality flag: `GOOD`, `UNVERIFIED`,
   `OUT_OF_RANGE`, `INCOMPLETE`, or `INVALID`.
-- Manager CSV and XLSX exports remain limited to Time, Volts, mAmp, Frec, and
-  Status; technical quality evidence remains in SQLite and the support API.
+- Manager CSV and XLSX Raw Data remain limited to Fecha, Hora, Volts, mAmp, and
+  Frec; technical connection and quality evidence remains in SQLite and the
+  support API. The XLSX Report derives valid-reading counts, production-aware
+  averages, and estimated pause/disconnection durations without deleting or
+  rewriting any selected raw reading.
 
 ## Timestamp policy
 

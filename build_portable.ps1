@@ -45,7 +45,7 @@ New-Item -ItemType Directory -Force -Path $DistRoot, $workRoot, $specRoot | Out-
     --specpath $specRoot `
     --paths $sourceRoot `
     --add-data "${dashboardSource}:dashboard" `
-    --hidden-import "openpyxl" `
+    --hidden-import "xlsxwriter" `
     $launcher
 
 if ($LASTEXITCODE -ne 0) {

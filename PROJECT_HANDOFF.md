@@ -1,8 +1,9 @@
 # VFREG Visor — Project Handoff
 
-Last updated: 2026-08-24
-Current development version: `0.4.0.dev0`
-Production-readiness status: Phase 5 complete
+Last updated: 2026-09-06
+Current development version: `0.4.0.dev1`
+Production-readiness status: Phase 6B functional foundation implemented;
+approved company logo/icon assets and stakeholder review pending
 
 ## User communication
 
@@ -49,7 +50,7 @@ The private GitHub repository is `mconsalvo95-tech/vfreg-visor-sofia`.
 - `src/vfreg_visor/network.py`: simulator listeners and collector selection.
 - `src/vfreg_visor/storage.py`: SQLite, events, CSV, and raw journal.
 - `src/vfreg_visor/exports.py`: XLSX export and charts.
-- `dashboard/`: browser UI.
+- `dashboard/`: Spanish operator UI with Live, History, and Reports sections.
 - `tests/`: automated protocol, storage, export, and startup-safety tests.
 - `config.example.json`: safe configuration template.
 - `config.factory.json`: local deployment configuration, excluded from Git.
@@ -82,8 +83,8 @@ Wireshark on the factory computer.
 
 - The company-PC pilot succeeded with the real viewer.
 - Phase 2 reproducible environment was merged through PR #1.
-- Phase 5 validation passes 51 automated tests, including HTTP-level filtered
-  readings, CSV, XLSX, and invalid-range cases.
+- Phase 6B validation passes 58 automated tests, including HTTP-level filtered
+  readings, CSV, XLSX, dashboard contracts, and invalid-range cases.
 - Both simulator and factory configurations pass the new schema validation.
 - The reviewed Phase 4 PyInstaller package builds and its executable reports
   `VFREG Visor 0.3.0.dev1` in an offline smoke test. The portable launcher opens
@@ -98,9 +99,41 @@ Wireshark on the factory computer.
   2,000 sampled chart points.
 - Existing database schema, relative data paths, exports, and confirmed Modbus
   mapping remain compatible.
+- Phase 6B adds the approved **VFREG · SOFIA** visual foundation, keeps routine
+  technical information collapsed, and separates connection state from process
+  state. Zero/near-zero Volts and mAmp with continuing frequency appears as
+  **Producción detenida** while the device remains **Conectado**; raw readings
+  are never rewritten or discarded.
+- Phase 6C adds one shared 5/15/30/60-minute, current-workday, or custom period
+  for trends, history, counts, and filtered downloads. It also adds compact
+  metric trends, overview/detail charts, zoom, exact-value tooltips, table-only
+  quality filters, a sticky table header, and a complete-history report scope.
+  These controls query stored data only and never mutate collection.
+- The synchronized period can now be changed directly from History or through
+  the guided Reports workflow. Reports provides workday, complete-history, and
+  custom scopes, CSV/XLSX format selection, a live download summary, and an
+  XLSX workbook-content preview. The three live metric-card sparklines are now
+  independent from that period: each always shows the latest 40 readings and
+  uses a simple fixed operator-facing label. History interprets 5/15/30/60
+  minutes as sampling intervals from the configured workday start to now. Each
+  row is a real stored reading: the first available reading in its aligned
+  interval. Trends and Reports keep independent period controls, and raw data
+  remains unchanged. Sampling clicks supersede automatic refresh requests and
+  expose a loading state while the table changes. Rows and totals come from one
+  database snapshot so live inserts cannot make UI counts disagree. The
+  complete suite passes 70 tests.
+- Phase 6D is partially implemented: management CSV/XLSX exports now split
+  Fecha and Hora, preserve seconds, omit connection status, and use the same
+  selected report period. XLSX contains only Raw Data and Report worksheets.
+  Report provides blank numeric-validated Min/Max cells, positive-reading
+  averages, and three separate charts with conditional limit lines. The
+  dashboard shows a matching live workbook preview before download.
+- The current-workday start is configured with
+  `factory.production_start_time` and defaults to `06:00`.
 
 ## Next work
 
-Follow `PRODUCTION_READINESS_ROADMAP.md`. The next planned work is the UI/UX
-refinement checkpoint, followed by Phase 6 runtime reliability. Keep the
-production Modbus path strictly read-only while that work proceeds.
+Follow `PRODUCTION_READINESS_ROADMAP.md`. Finish the remaining Phase 6D report
+metrics and large-XLSX row-limit handling, then continue to Phase 6E validation.
+Keep the logo placeholder until approved brand assets are supplied, and keep
+the production Modbus path strictly read-only while that work proceeds.

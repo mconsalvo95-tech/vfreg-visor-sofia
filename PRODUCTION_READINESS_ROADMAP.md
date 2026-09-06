@@ -1,7 +1,10 @@
 # VFREG Visor — Production Readiness Roadmap
 
-Last updated: 2026-08-24  
-Current status: Phase 5 complete; successful factory pilot preserved
+Last updated: 2026-08-25
+
+Current status: Phase 6B functional foundation complete; approved brand assets
+and stakeholder review are pending
+
 Target milestone: `v1.0.0`
 
 ## Purpose
@@ -185,27 +188,164 @@ Goal: Protect measurements during continuous operation.
 
 ---
 
-## UI/UX refinement checkpoint — after Phase 5, before Phase 6
+## Phase 6 — Operator UI/UX and management reporting
 
-Goal: Improve the management and operator experience now that the operational
-states and data-integrity signals are stable.
+Goal: Create a modern, branded, operator-friendly interface and produce clear
+management exports without changing collection, storage, or device behavior.
 
-- [ ] Review the information hierarchy for managers and normal operators.
-- [ ] Improve chart legibility, spacing, responsive behavior, and visual polish.
-- [ ] Surface connection gaps, data-quality issues, and storage warnings in
-  plain language without exposing routine backend diagnostics.
-- [ ] Design clear empty, loading, disconnected, degraded-storage, and export
-  error states.
-- [ ] Preserve the current history filters, exports, local-only binding, and
-  read-only Modbus behavior.
-- [ ] Test the dashboard at the production PC's screen size and browser zoom.
+### Phase 6A — Interactive mockup and approval
 
-This checkpoint changes presentation and operator guidance only. It must not
-change the confirmed device protocol or pause collection.
+- [x] Create a static dashboard mockup before modifying the production
+  dashboard.
+- [x] Obtain stakeholder approval before starting Phase 6B production UI
+  changes.
+- [x] Build the mockup as standalone local HTML/CSS/JavaScript with sanitized
+  readings so approved visual components can be reused in the production UI.
+- [x] Make the mockup interactive: navigation, time presets, chart tabs,
+  reading-quality filters, export selection, and representative connection
+  states must be reviewable without a live collector.
+- [x] Represent the company logo with a placeholder until the approved logo and
+  brand color are supplied; show the proposed **VFREG · SOFIA** identity.
+- [x] Demonstrate clear plain-language states with an icon and label: **Normal**,
+  **Production paused**, **Out of range**, **Not configured**,
+  **No recent data**, and **Disconnected**.
+- [x] Capture and review the mockup at 1366×768 before approving Phase 6B.
+
+### Phase 6B — Dashboard visual foundation
+
+- [x] Add the **VFREG · SOFIA** product identity and a reserved company-logo
+  position without inventing an unapproved brand mark.
+- [x] Keep a labeled placeholder until the user supplies the approved company
+  logo. Track the custom application icon and browser favicon as a future
+  brand-asset refinement so they do not block operator workflow work.
+- [x] Implement operator-facing navigation with **Live monitoring**,
+  **History**, and **Reports** while keeping routine diagnostics outside the
+  normal operator view.
+- [x] Implement the approved modern light-industrial visual system with a dark
+  branded header, high-contrast typography, large measurements, consistent
+  spacing, subtle borders, and controls suitable for the factory display.
+- [x] Give Volts, mAmp, and frequency distinct, consistent visual identities
+  while never relying on color alone to communicate status.
+- [x] Add the approved branded launch/connection experience with understandable
+  progress and a retry action when startup cannot reach the device.
+- [x] Implement clear empty, loading, production-paused, disconnected,
+  stale-data, degraded-storage, and export-error states. Keep connection and
+  process state independent: zero/near-zero Volts and mAmp with continuing
+  frequency is **Production paused**, not a connection fault.
+
+### Phase 6C — Live charts and history interaction
+
+- [x] Use one synchronized selected time range for charts, Recent Readings,
+  the matching-record count, and filtered export, with controls available in
+  the Live trends, History, and Reports workflows where operators need them.
+- [x] Provide 5-minute, 15-minute, 30-minute, 1-hour, current-workday, and
+  custom `Desde` / `Hasta` ranges.
+- [x] Define the current workday as the configurable production start time,
+  initially `06:00`, through the current local time.
+- [x] Make custom ranges explicit with **Aplicar** and **Limpiar** actions, show
+  the selected period, and prevent invalid or reversed ranges from running.
+- [x] Add Recent Readings filters for **All**, **Valid**, and
+  **Out of range**, with a sticky header and visible matching-record count.
+- [x] Add compact live trends to the three measurement cards and provide both
+  synchronized overview charts and a detailed single-metric chart view.
+- [x] Improve chart legibility, responsive behavior, zoom, exact-value
+  tooltips, and visible reset actions.
+- [x] Keep a separate historical export that includes all stored readings up
+  to the selected cutoff, independently of the active Recent Readings filter.
+- [x] Preserve collection gaps and incomplete/zero readings in raw exports;
+  filtering must never delete or rewrite stored history.
+
+### Phase 6D — CSV and XLSX export redesign
+
+- [x] Provide clearly separated export scopes: **Historical data**,
+  **Current workday**, and **Custom period**.
+- [x] Make the selected scope, time period, format, and matching-record count
+  visible before download.
+- [x] Keep CSV as a clean raw-data export with the columns `Fecha`, `Hora`,
+  `Volts`, `mAmp`, and `Frec`, in that order. Do not add summary/footer rows.
+- [x] Split timestamps into a sortable `Fecha` value formatted as `YYYY-MM-DD`
+  and `Hora` formatted as `HH:mm:ss`.
+- [x] Exclude connection status from management CSV/XLSX columns while keeping
+  the complete timestamp, connection state, and quality information in SQLite
+  for internal diagnostics.
+- [x] Generate one XLSX workbook with a **Raw Data** worksheet containing the
+  same selected raw readings as CSV and a separate **Report** worksheet.
+- [x] In **Report**, provide the parameter names and units but leave the
+  minimum/maximum limit cells empty and visibly editable for employees.
+- [x] Validate report limit inputs as numeric values and treat blanks as
+  **Not configured**, never as zero.
+- [x] Calculate averages from positive readings only so missing/incomplete zero
+  values do not distort the report.
+- [x] Preserve production-pause readings in Raw Data. Exclude zero/near-zero
+  Volts and mAmp from production averages while retaining received frequency,
+  and report paused duration separately from disconnection time.
+- [x] Add report start/end time, record counts, valid-reading counts, and
+  per-parameter out-of-range counts.
+- [x] Add separate Voltage, mAmp, and Frequency charts. Each chart must show the
+  measured series and display its minimum/maximum limit lines only after the
+  employee configures both limits.
+- [x] Let operators choose Automatic, 1, 5, 10, 15, or 30-minute resolution
+  for exported XLSX charts. Keep Raw Data and report statistics complete,
+  average each manual time bucket, and preserve detected production-pause
+  points in the chart helper data.
+- [x] Keep formula/helper columns hidden and preserve all selected raw readings
+  even when the Report excludes invalid readings from calculations.
+- [x] Protect against Excel's 1,048,576-row worksheet limit by requiring a
+  smaller range, splitting large XLSX history by period, or directing the user
+  to CSV without interrupting collection.
+### Phase 6E — Validation and production-PC review
+
+- [ ] Test the approved implementation at the production PC's screen size and
+  browser zoom.
+- [x] Verify keyboard operation, readable Spanish operator labels, contrast,
+  focus states, and non-color status cues. *(Local: static HTML/JS/CSS checks,
+  WCAG AA contrast regression in `test_phase6b_dashboard`, and approved header
+  identity test; interactive Tab/keyboard/screen-reader pass still required.)*
+- [ ] Verify all Phase 6 export scopes while collection continues.
+- [ ] Review the finished phase with a normal operator and manager before final
+  merge.
+
+### Phase 6 acceptance criteria
+
+- The approved mockup is reviewed before production UI code changes begin.
+- A normal operator can understand live state, inspect history, and start the
+  correct download without seeing backend terminology.
+- A planned production stop remains **Connected** and is shown separately as
+  **Production paused** when Volts and mAmp are zero/near zero but frequency is
+  still being received.
+- Chart, Recent Readings, matching count, and filtered export use the same
+  selected time range.
+- Historical export includes every selected stored record, including gaps and
+  incomplete readings; current-workday export uses the configured workday start.
+- CSV contains only the five clean raw-data columns and no calculated summary
+  rows.
+- XLSX contains **Raw Data** and **Report** worksheets; the raw sheet reconciles
+  exactly to CSV for the same scope.
+- Entering report limits recalculates statuses, out-of-range counts, and chart
+  limit lines without modifying raw data.
+- Exported dates and times remain sortable and preserve seconds.
+- Exporting and UI filtering never pause, change, or discard collection.
+- The confirmed local-only dashboard binding and read-only Modbus function `04`
+  behavior remain unchanged.
+
+### Phase 6F and later — Approved future refinements
+
+- [ ] Record new UI/UX ideas discovered after Phase 6A here, then prioritize
+  them only after the approved Phase 6A–6E work is stable.
+- [ ] Replace the labeled logo placeholder and add the approved application
+  icon and browser favicon when the company brand assets are supplied.
+- [ ] Keep a Power BI-ready export documented as an inactive future option; do
+  not expose it in the Phase 6 application UI.
+- [ ] Revisit the approved mockup colors after operational behavior and
+  reporting are stable; color changes must preserve contrast and non-color
+  status cues.
+
+Phase 6 changes presentation, history interaction, and export formatting only.
+It must not change the confirmed device protocol or safety constraints.
 
 ---
 
-## Phase 6 — Runtime reliability
+## Phase 7 — Runtime reliability
 
 Goal: Operate unattended on the factory PC.
 
@@ -216,10 +356,22 @@ Goal: Operate unattended on the factory PC.
 - [ ] Add health information for the collector, storage writer, and last valid
   reading.
 - [ ] Add structured operational logs with timestamps and severity.
-- [ ] Decide between a Windows service and a Scheduled Task for automatic
-  startup.
-- [ ] Start the collector automatically after Windows restarts.
+- [ ] Use Windows Task Scheduler for the initial unattended deployment and
+  provide an installation script that creates or updates the task safely.
+- [ ] Start the collector every day at `05:50` so it is ready before production
+  begins at `06:00`.
+- [ ] Configure **Run task as soon as possible after a scheduled start is
+  missed** and **Wake the computer to run this task** where company policy
+  permits it.
+- [ ] Add a Windows startup or user-logon trigger so a restart also returns the
+  collector to service without waiting until the following day.
+- [ ] Document that the initial portable deployment requires the dedicated
+  Windows operator account to remain signed in; locking the session is allowed.
+- [ ] Keep reconnecting safely when the task starts before the VFREG/NT1-B is
+  powered or reachable.
 - [ ] Avoid opening duplicate dashboard or collector processes.
+- [ ] Configure the scheduled task to keep the existing instance instead of
+  launching another one when the collector is already running.
 - [ ] Provide a safe manual stop/restart procedure.
 
 ### Acceptance criteria
@@ -227,11 +379,18 @@ Goal: Operate unattended on the factory PC.
 - The application resumes collection without operator intervention after a
   temporary network interruption.
 - A Windows restart returns the collector to service automatically.
+- With the PC left powered on and the operator account signed in, the collector
+  starts by `05:50`, becomes ready before `06:00`, and remains functional while
+  the Windows session is locked.
+- A missed trigger or unavailable VFREG does not require someone in the room:
+  Windows starts the task when possible and the collector reconnects when the
+  device becomes reachable.
+- Running the scheduled task again never creates a second collector instance.
 - Normal shutdown leaves no pending SQLite WAL files or lost queued records.
 
 ---
 
-## Phase 7 — Packaging and deployment
+## Phase 8 — Packaging and deployment
 
 Goal: Produce controlled, versioned releases for company computers.
 
@@ -256,7 +415,7 @@ Goal: Produce controlled, versioned releases for company computers.
 
 ---
 
-## Phase 8 — Security and industrial safeguards
+## Phase 9 — Security and industrial safeguards
 
 Goal: Minimize technical and operational risk.
 
@@ -280,7 +439,7 @@ Goal: Minimize technical and operational risk.
 
 ---
 
-## Phase 9 — Production validation
+## Phase 10 — Production validation
 
 Goal: Prove stability under realistic factory conditions.
 
@@ -314,7 +473,7 @@ Goal: Prove stability under realistic factory conditions.
 
 ---
 
-## Phase 10 — Documentation and ownership
+## Phase 11 — Documentation and ownership
 
 Goal: Make operation and support independent of the original development chat.
 
@@ -380,3 +539,10 @@ Record meaningful production decisions here as they are approved.
 | 2026-08-24 | Use `uv` for development and PyInstaller for Windows deployment | Reproducible development plus offline operation | MC95 |
 | 2026-08-24 | Support Python 3.13 for the production-ready development baseline | Match the successfully tested development and Windows build environment | MC95 |
 | 2026-08-24 | Use `src/vfreg_visor` with one production CLI entry point | Separate responsibilities while keeping the confirmed device protocol unchanged | MC95 |
+| 2026-08-25 | Make operator UI/UX and management reporting Phase 6, starting with an approved static mockup | Validate the experience before changing the proven production dashboard | MC95 |
+| 2026-08-25 | Keep CSV raw and generate XLSX with separate Raw Data and Report worksheets | Preserve audit-ready readings while giving management summaries and charts | MC95 |
+| 2026-08-25 | Leave XLSX report limits empty and employee-configurable | Allow each work period to use approved operational limits without altering raw data | MC95 |
+| 2026-08-25 | Keep Power BI integration inactive as a documented future option | Prioritize the formats employees currently use | MC95 |
+| 2026-08-25 | Approve the Phase 6A mockup and proceed to Phase 6B, with final color refinement deferred | The structure and interaction are approved; operational behavior has priority over visual polish | MC95 |
+| 2026-08-25 | Treat zero/near-zero Volts and mAmp with continuing frequency as Production paused while Connected | This condition was observed during the 2026-08-21 factory stop and must not be mistaken for disconnection or missing data | MC95 |
+| 2026-08-25 | Keep Phase 6B pause detection in the dashboard layer and preserve every raw reading | Improve operator guidance without changing the confirmed collector, protocol, or stored evidence | MC95 |

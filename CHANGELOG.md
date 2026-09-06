@@ -7,6 +7,8 @@ release.
 
 ## Unreleased
 
+## 0.4.0.dev1 — 2026-09-06
+
 - Production-readiness work begins from the successful company-PC pilot.
 - Added a Python 3.13 `uv` environment with a committed dependency lockfile.
 - Separated the OpenPyXL runtime dependency from the PyInstaller development
@@ -25,7 +27,7 @@ release.
   Readings, Charts, and hidden Chart Data worksheets.
 - Added a discreet support link and kept technical diagnostics out of the normal
   dashboard.
-- Advanced the development version to `0.4.0.dev0`.
+- Advanced the development version to `0.4.0.dev1`.
 - The portable executable now opens the dashboard in the Windows default browser
   automatically while keeping its collector console visible.
 - Added 400-day measurement and event retention, a 12 GB runtime storage budget,
@@ -35,6 +37,65 @@ release.
   commands, and tested recovery of WAL-committed records after abrupt exit.
 - Added explicit Modbus data-gap events and backend quality flags for
   unverified, out-of-range, incomplete, and invalid readings.
+- Added the approved Phase 6 **VFREG · SOFIA** Spanish operator shell with
+  separate Live, History, and Reports sections while keeping routine technical
+  information collapsed.
+- Added plain-language waiting, disconnected, stale-data, storage-warning,
+  export-error, and production-paused UI states. Production pause is inferred
+  only for presentation when Volts and mAmp are zero/near zero while frequency
+  continues; collection and raw history remain unchanged.
+- Added a shared time period for live trends, history, matching counts, and
+  filtered CSV/XLSX downloads, with 5/15/30/60-minute, current-workday, and
+  validated custom ranges.
+- Added card sparklines, overview and single-metric chart modes, zoom, exact
+  value tooltips, sticky history headers, table-only quality filters, and a
+  separate historical CSV through the selected cutoff. Raw stored readings,
+  including zero values and gaps, remain unchanged.
+- Kept the operator-controlled recording interval in a compact top control and
+  moved the displayed time range into the Live Monitoring trends panel that it
+  directly controls. The controls no longer remain pinned while scrolling, and
+  Report's **Change period** action returns directly to the chart selector.
+- Scoped the recording-interval control to **Live Monitoring** so it is hidden
+  automatically in the History and Reports views.
+- Restored synchronized period controls inside History and a guided Reports
+  workflow with workday, full-history, and custom scopes. Report format
+  selection once again updates a visible download summary, and selecting
+  **Excel + charts** reveals a truthful workbook-content preview.
+- Decoupled the three card sparklines from the selected Trends period. They now
+  always show the latest 40 live readings with a simple operator-facing label.
+- History now treats 5/15/30/60 minutes as sampling intervals across the
+  current workday, selecting the first real stored reading in each aligned
+  interval instead of showing second-by-second rows from a recent-time window.
+- Redesigned management exports so CSV and XLSX use the clean Fecha, Hora,
+  Volts, mAmp, and Frec columns without connection status. XLSX now contains
+  Raw Data plus a Report worksheet with blank validated limit cells,
+  positive-reading averages, and separate Voltage, Current, and Frequency
+  charts whose limit lines appear only after both limits are entered.
+- Restored a live XLSX preview in Reports with the same parameter/limit table,
+  calculated averages, and three separate trend previews for the selected
+  period.
+- History sampling selections respond immediately, show a visible loading
+  state, and supersede any automatic refresh already in progress. Trends and
+  Reports retain their independent period behavior, and raw readings remain
+  unchanged for exports and investigation.
+- History source rows and their total are now read from the same SQLite snapshot,
+  preventing live inserts from producing a misleading one-row truncation
+  message while the simulator or factory collector is active.
+- Completed the Phase 6D workbook report with explicit start/end timestamps,
+  total and valid reading counts, editable-limit out-of-range formulas, and
+  separate estimated production-pause and disconnection durations.
+- Production pauses remain untouched in Raw Data. Voltage and current averages
+  exclude zero/near-zero pause values, while received frequency remains part of
+  its own average.
+- XLSX export now rejects selections beyond Excel's 1,048,575 data-row capacity
+  with smaller-period/CSV guidance; the collector continues running normally.
+- Reports now offer Automatic, 1, 5, 10, 15, and 30-minute XLSX chart
+  resolution. Manual intervals chart bucket averages while retaining detected
+  production-pause points; Raw Data and all report calculations remain complete.
+- Improved Excel 2019 chart compatibility: hidden helper data now materializes
+  typed timestamps and measurements, charts opt into hidden-cell plotting, and
+  workbook objects are explicitly visible. Manual Excel/Google Sheets validation
+  remains an operational gate.
 
 ## 0.1.0-pilot-success — 2026-08-24
 

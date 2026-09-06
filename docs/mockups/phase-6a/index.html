@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Prototipo local de la interfaz VFREG SOFIA">
+  <title>VFREG · SOFIA — Prototipo Fase 6A</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Ir al contenido principal</a>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo-placeholder" aria-label="Ubicación del logotipo de la empresa">LOGO</div>
+      <div class="brand-copy">
+        <span class="brand-kicker">Sistema de monitoreo</span>
+        <strong>VFREG <span>· SOFIA</span></strong>
+      </div>
+    </div>
+
+    <nav class="primary-nav" aria-label="Navegación principal">
+      <button class="nav-button is-active" type="button" data-view="live" aria-current="page">Monitoreo en vivo</button>
+      <button class="nav-button" type="button" data-view="history">Historial</button>
+      <button class="nav-button" type="button" data-view="reports">Reportes</button>
+    </nav>
+
+    <div class="topbar-meta">
+      <div class="clock-block">
+        <strong id="current-time">--:--:--</strong>
+        <span id="current-date">--</span>
+      </div>
+      <div class="connection-pill" id="connection-pill" data-state="normal" role="status">
+        <span class="connection-symbol" aria-hidden="true">✓</span>
+        <span>
+          <strong id="connection-title">Conectado</strong>
+          <small id="connection-detail">Actualizado hace 3 s</small>
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <div class="prototype-bar">
+    <span><strong>Prototipo Fase 6A</strong> · Datos simulados, sin conexión al equipo</span>
+    <label for="demo-state">Probar estado
+      <select id="demo-state">
+        <option value="normal">Funcionamiento normal</option>
+        <option value="paused">Producción detenida</option>
+        <option value="alarm">Valor fuera de rango</option>
+        <option value="stale">Sin datos recientes</option>
+        <option value="disconnected">Equipo desconectado</option>
+      </select>
+    </label>
+  </div>
+
+  <main id="main-content">
+    <section class="app-view is-active" id="view-live" data-view-panel="live">
+      <div class="page-heading">
+        <div>
+          <p class="eyebrow">Sala de insensibilización</p>
+          <h1>Estado del proceso</h1>
+          <p class="heading-detail">Lectura del visor VFREG · Unidad 5</p>
+        </div>
+        <div class="page-actions">
+          <button class="secondary-button" type="button" data-view-target="history">Ver historial</button>
+          <button class="primary-button" type="button" data-open-export>Descargar datos</button>
+        </div>
+      </div>
+
+      <div class="system-banner is-hidden" id="system-banner" role="alert">
+        <span class="banner-icon" aria-hidden="true">!</span>
+        <div>
+          <strong id="banner-title">Atención requerida</strong>
+          <p id="banner-message">Revise el estado del sistema.</p>
+        </div>
+        <button type="button" id="banner-action">Ver detalle</button>
+      </div>
+
+      <section class="metric-grid" aria-label="Mediciones actuales">
+        <article class="metric-card voltage-card" data-quality="normal">
+          <div class="metric-heading">
+            <span class="metric-icon" aria-hidden="true">V</span>
+            <div>
+              <p>Voltaje</p>
+              <span>Lectura actual</span>
+            </div>
+            <span class="quality-badge"><b aria-hidden="true">✓</b> Normal</span>
+          </div>
+          <div class="metric-value"><strong id="metric-voltage">36.8</strong><span>V</span></div>
+          <canvas class="sparkline" id="spark-voltage" aria-label="Tendencia reciente de voltaje"></canvas>
+          <div class="metric-footer"><span>Últimos 5 minutos</span><strong id="trend-voltage">Estable</strong></div>
+        </article>
+
+        <article class="metric-card current-card" data-quality="normal">
+          <div class="metric-heading">
+            <span class="metric-icon" aria-hidden="true">mA</span>
+            <div>
+              <p>Corriente</p>
+              <span>Lectura actual</span>
+            </div>
+            <span class="quality-badge"><b aria-hidden="true">✓</b> Normal</span>
+          </div>
+          <div class="metric-value"><strong id="metric-current">427</strong><span>mA</span></div>
+          <canvas class="sparkline" id="spark-current" aria-label="Tendencia reciente de corriente"></canvas>
+          <div class="metric-footer"><span>Últimos 5 minutos</span><strong id="trend-current">+1.2%</strong></div>
+        </article>
+
+        <article class="metric-card frequency-card" data-quality="normal">
+          <div class="metric-heading">
+            <span class="metric-icon" aria-hidden="true">Hz</span>
+            <div>
+              <p>Frecuencia</p>
+              <span>Lectura actual</span>
+            </div>
+            <span class="quality-badge"><b aria-hidden="true">✓</b> Normal</span>
+          </div>
+          <div class="metric-value"><strong id="metric-frequency">202.2</strong><span>Hz</span></div>
+          <canvas class="sparkline" id="spark-frequency" aria-label="Tendencia reciente de frecuencia"></canvas>
+          <div class="metric-footer"><span>Últimos 5 minutos</span><strong id="trend-frequency">Estable</strong></div>
+        </article>
+      </section>
+
+      <section class="panel chart-panel" aria-labelledby="live-chart-title">
+        <div class="panel-header chart-header">
+          <div>
+            <p class="eyebrow">Tendencias</p>
+            <h2 id="live-chart-title">Comportamiento en el tiempo</h2>
+          </div>
+          <div class="chart-mode-tabs" role="tablist" aria-label="Variable del gráfico">
+            <button class="is-active" type="button" role="tab" aria-selected="true" data-chart-mode="overview">Resumen</button>
+            <button type="button" role="tab" aria-selected="false" data-chart-mode="voltage">Voltaje</button>
+            <button type="button" role="tab" aria-selected="false" data-chart-mode="current">Corriente</button>
+            <button type="button" role="tab" aria-selected="false" data-chart-mode="frequency">Frecuencia</button>
+          </div>
+        </div>
+        <div class="range-toolbar" aria-label="Rango de tiempo">
+          <span>Periodo</span>
+          <button type="button" data-range="5">5 min</button>
+          <button class="is-active" type="button" data-range="15">15 min</button>
+          <button type="button" data-range="30">30 min</button>
+          <button type="button" data-range="60">1 hora</button>
+          <button type="button" data-range="workday">Jornada actual</button>
+          <button type="button" data-range="custom">Personalizado</button>
+          <strong id="selected-period">Hoy, 10:27–10:42</strong>
+        </div>
+        <div class="custom-range is-hidden" id="custom-range">
+          <label>Desde <input type="datetime-local" id="custom-from" step="1"></label>
+          <label>Hasta <input type="datetime-local" id="custom-to" step="1"></label>
+          <button class="small-primary" type="button" id="custom-apply">Aplicar</button>
+          <button class="small-secondary" type="button" id="custom-clear">Limpiar</button>
+          <span id="custom-result" role="status"></span>
+        </div>
+        <div class="chart-container">
+          <canvas id="main-chart" aria-label="Gráfico simulado de mediciones VFREG"></canvas>
+          <div class="chart-tooltip is-hidden" id="chart-tooltip" role="status"></div>
+        </div>
+        <div class="chart-legend" id="chart-legend" aria-label="Leyenda del gráfico">
+          <span class="legend-voltage">Voltaje</span>
+          <span class="legend-current">Corriente</span>
+          <span class="legend-frequency">Frecuencia</span>
+        </div>
+      </section>
+
+      <section class="summary-grid" aria-label="Resumen de la jornada">
+        <article><span>Inicio de jornada</span><strong>06:00</strong><small>Configuración inicial</small></article>
+        <article><span>Lecturas válidas</span><strong>1.644</strong><small>98,7% del periodo</small></article>
+        <article><span>Fuera de rango</span><strong>12</strong><small>Requieren revisión</small></article>
+        <article><span>Disponibilidad</span><strong>99,2%</strong><small>Conexión del visor</small></article>
+      </section>
+
+      <section class="panel recent-panel" aria-labelledby="recent-title">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Últimos datos</p>
+            <h2 id="recent-title">Lecturas recientes</h2>
+          </div>
+          <button class="text-button" type="button" data-view-target="history">Abrir historial completo →</button>
+        </div>
+        <div class="compact-table-wrap">
+          <table>
+            <thead><tr><th>Fecha</th><th>Hora</th><th>Voltaje</th><th>Corriente</th><th>Frecuencia</th><th>Calidad</th></tr></thead>
+            <tbody id="live-reading-rows"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <section class="app-view" id="view-history" data-view-panel="history">
+      <div class="page-heading">
+        <div>
+          <p class="eyebrow">Consulta de datos</p>
+          <h1>Historial de lecturas</h1>
+          <p class="heading-detail">Busque un periodo y revise las mediciones guardadas.</p>
+        </div>
+        <button class="primary-button" type="button" data-open-export>Descargar periodo</button>
+      </div>
+
+      <section class="panel history-controls">
+        <div class="control-group">
+          <span class="control-label">Periodo</span>
+          <div class="segmented-control" id="history-ranges">
+            <button type="button" data-history-range="5">5 min</button>
+            <button type="button" data-history-range="15">15 min</button>
+            <button type="button" data-history-range="30">30 min</button>
+            <button type="button" data-history-range="60">1 hora</button>
+            <button class="is-active" type="button" data-history-range="workday">Jornada actual</button>
+            <button type="button" data-history-range="custom">Personalizado</button>
+          </div>
+        </div>
+        <div class="control-group">
+          <span class="control-label">Calidad</span>
+          <div class="segmented-control" id="quality-filters">
+            <button class="is-active" type="button" data-quality-filter="all">Todas</button>
+            <button type="button" data-quality-filter="valid">Válidas</button>
+            <button type="button" data-quality-filter="alarm">Fuera de rango</button>
+          </div>
+        </div>
+        <div class="history-selection">
+          <span>Periodo seleccionado</span>
+          <strong id="history-period">25/08/2026 · 06:00 hasta ahora</strong>
+        </div>
+      </section>
+
+      <section class="panel history-table-panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Resultados</p>
+            <h2><span id="history-count">48</span> lecturas encontradas</h2>
+          </div>
+          <div class="table-legend"><span><b class="dot normal"></b> Válida</span><span><b class="dot alarm"></b> Fuera de rango</span></div>
+        </div>
+        <div class="history-table-wrap">
+          <table>
+            <thead><tr><th>Fecha</th><th>Hora</th><th>Voltaje</th><th>Corriente</th><th>Frecuencia</th><th>Calidad</th></tr></thead>
+            <tbody id="history-reading-rows"></tbody>
+          </table>
+        </div>
+        <div class="table-footer">
+          <span>Mostrando datos simulados para revisión visual</span>
+          <button class="secondary-button" type="button" data-open-export>Descargar estas lecturas</button>
+        </div>
+      </section>
+    </section>
+
+    <section class="app-view" id="view-reports" data-view-panel="reports">
+      <div class="page-heading">
+        <div>
+          <p class="eyebrow">Centro de descargas</p>
+          <h1>Crear un reporte</h1>
+          <p class="heading-detail">Seleccione qué periodo necesita y el formato de entrega.</p>
+        </div>
+      </div>
+
+      <section class="report-builder">
+        <div class="report-step">
+          <div class="step-heading"><span>1</span><div><strong>Seleccione el periodo</strong><small>Qué lecturas desea descargar</small></div></div>
+          <div class="scope-cards">
+            <button class="scope-card is-selected" type="button" data-scope="workday">
+              <span class="scope-icon" aria-hidden="true">☀</span>
+              <strong>Jornada actual</strong>
+              <small>Desde las 06:00 hasta ahora</small>
+              <b>1.644 lecturas</b>
+            </button>
+            <button class="scope-card" type="button" data-scope="history">
+              <span class="scope-icon" aria-hidden="true">≡</span>
+              <strong>Histórico completo</strong>
+              <small>Todos los datos almacenados</small>
+              <b>17.912 lecturas</b>
+            </button>
+            <button class="scope-card" type="button" data-scope="custom">
+              <span class="scope-icon" aria-hidden="true">⌁</span>
+              <strong>Periodo personalizado</strong>
+              <small>Elija fecha y hora de inicio y fin</small>
+              <b>Configurar periodo</b>
+            </button>
+          </div>
+        </div>
+
+        <div class="report-step">
+          <div class="step-heading"><span>2</span><div><strong>Seleccione el formato</strong><small>Cómo desea utilizar los datos</small></div></div>
+          <div class="format-cards">
+            <button class="format-card" type="button" data-format="csv">
+              <span class="file-mark">CSV</span>
+              <span><strong>Datos sin procesar</strong><small>Fecha, hora y las tres mediciones. Ideal para revisar o importar.</small></span>
+              <b class="selection-mark" aria-hidden="true">✓</b>
+            </button>
+            <button class="format-card is-selected" type="button" data-format="xlsx">
+              <span class="file-mark excel">XLSX</span>
+              <span><strong>Datos + reporte</strong><small>Incluye Raw Data, promedios, límites editables y tres gráficos.</small></span>
+              <b class="selection-mark" aria-hidden="true">✓</b>
+            </button>
+          </div>
+        </div>
+
+        <aside class="download-summary" aria-label="Resumen de descarga">
+          <p class="eyebrow">Resumen</p>
+          <h2>Reporte de jornada actual</h2>
+          <dl>
+            <div><dt>Periodo</dt><dd id="report-period">25/08/2026 · 06:00 hasta ahora</dd></div>
+            <div><dt>Registros</dt><dd id="report-count">1.644</dd></div>
+            <div><dt>Formato</dt><dd id="report-format">Excel con reporte</dd></div>
+            <div><dt>Contenido</dt><dd id="report-content">Raw Data + Report</dd></div>
+          </dl>
+          <button class="download-button" type="button" id="simulate-download">Descargar XLSX</button>
+          <small>La descarga del prototipo es simulada.</small>
+        </aside>
+      </section>
+
+      <section class="panel workbook-preview" aria-labelledby="workbook-preview-title">
+        <div class="panel-header">
+          <div><p class="eyebrow">Vista previa</p><h2 id="workbook-preview-title">Contenido del archivo Excel</h2></div>
+          <div class="sheet-tabs"><span>Raw Data</span><span class="is-active">Report</span></div>
+        </div>
+        <div class="report-preview-grid">
+          <div class="limit-preview">
+            <strong>Parámetros y límites</strong>
+            <table>
+              <thead><tr><th>Parámetro</th><th>Mínimo</th><th>Máximo</th><th>Unidad</th></tr></thead>
+              <tbody>
+                <tr><td>Voltaje</td><td class="editable-cell">Completar</td><td class="editable-cell">Completar</td><td>V</td></tr>
+                <tr><td>Miliamperes</td><td class="editable-cell">Completar</td><td class="editable-cell">Completar</td><td>mA</td></tr>
+                <tr><td>Frecuencia</td><td class="editable-cell">Completar</td><td class="editable-cell">Completar</td><td>Hz</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="report-kpi-preview">
+            <article><span>Promedio voltaje</span><strong>36,5 V</strong></article>
+            <article><span>Promedio corriente</span><strong>414 mA</strong></article>
+            <article><span>Promedio frecuencia</span><strong>202,2 Hz</strong></article>
+            <article><span>Fuera de rango</span><strong>Sin configurar</strong></article>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <div class="toast is-hidden" id="toast" role="status"></div>
+
+  <dialog class="export-dialog" id="export-dialog" aria-labelledby="export-dialog-title">
+    <form method="dialog">
+      <div class="dialog-header">
+        <div><p class="eyebrow">Descarga rápida</p><h2 id="export-dialog-title">Exportar periodo seleccionado</h2></div>
+        <button class="dialog-close" value="cancel" aria-label="Cerrar">×</button>
+      </div>
+      <div class="dialog-body">
+        <p>Seleccione un formato. La descarga conservará todas las lecturas del periodo, incluidos ceros y espacios sin producción.</p>
+        <label class="dialog-option"><input type="radio" name="quick-format" value="csv"><span><strong>CSV · Datos sin procesar</strong><small>Fecha, Hora, Volts, mAmp y Frec</small></span></label>
+        <label class="dialog-option"><input type="radio" name="quick-format" value="xlsx" checked><span><strong>XLSX · Datos + reporte</strong><small>Raw Data y Report con límites editables</small></span></label>
+      </div>
+      <div class="dialog-footer">
+        <button class="secondary-button" value="cancel">Cancelar</button>
+        <button class="primary-button" id="quick-download" value="default">Simular descarga</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
