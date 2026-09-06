@@ -5,6 +5,7 @@ param(
     [string]$TaskName = "VFREG-VISOR-SOFIA",
     [string]$ExecutableName = "VFREG-VISOR-SOFIA.exe",
     [string]$ConfigName = "config.factory.json",
+    [string]$DailyStartTime = "05:50",
     [string]$RunAsUser = "",
     [switch]$Remove,
     [switch]$ValidateOnly
@@ -12,10 +13,23 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$Script:DailyStartTime = "05:50"
+$Script:DailyStartTime = $DailyStartTime
 $Script:RestartCount = 3
 $Script:RestartIntervalMinutes = 1
 $Script:MultipleInstancesPolicy = "IgnoreNew"
+
+function Test-VFREGDailyStartTime {
+    param([string]$Time)
+
+    if ($Time -notmatch '^([01][0-9]|2[0-3]):([0-5][0-9])$') {
+        throw (
+            "DailyStartTime must be a valid 24-hour time in HH:mm format " +
+            "(for example 05:50 or 23:59). Got: '$Time'."
+        )
+    }
+
+    return $Time
+}
 
 function Resolve-VFREGDeploymentRoot {
     param([string]$RequestedRoot)
@@ -209,6 +223,10 @@ try {
             "-ValidateOnly cannot be combined with -Remove. Run -Remove alone to " +
             "unregister the task, or -ValidateOnly alone to inspect the planned registration."
         )
+    }
+
+    if (-not $Remove) {
+        $Script:DailyStartTime = Test-VFREGDailyStartTime -Time $DailyStartTime
     }
 
     $deploymentRoot = Resolve-VFREGDeploymentRoot -RequestedRoot $DeploymentRoot

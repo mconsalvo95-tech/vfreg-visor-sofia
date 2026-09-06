@@ -23,13 +23,17 @@ INSTALAR O ACTUALIZAR
    instalacion anterior si soporte indica conservar historial.
 4. Abrir PowerShell dentro de la carpeta extraida, con la cuenta del operador
    dedicado ya iniciada.
-5. Validar sin cambios en Windows:
+5. Validar sin cambios en Windows (horario de produccion por defecto 05:50):
 
    powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install-VFREGScheduledTask.ps1 -ValidateOnly
 
-6. Registrar o actualizar la tarea:
+6. Registrar o actualizar la tarea (comando de produccion; no cambiar el horario
+   salvo indicacion de soporte):
 
    powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install-VFREGScheduledTask.ps1
+
+   El script usa por defecto -DailyStartTime 05:50, nombre de tarea
+   "VFREG-VISOR-SOFIA" y config.factory.json de esta carpeta de planta.
 
 Si Windows muestra "Acceso denegado", repetir el paso 6 estando conectado con
 la cuenta del operador dedicado o solicitar a IT permiso para crear tareas
@@ -39,8 +43,8 @@ COMPORTAMIENTO AUTOMATICO
 -------------------------
 La tarea "VFREG-VISOR-SOFIA" hace lo siguiente:
 
-- Todos los dias a las 05:50 intenta iniciar el colector antes del arranque de
-  produccion (06:00).
+- Todos los dias a las 05:50 (valor por defecto de -DailyStartTime) intenta
+  iniciar el colector antes del arranque de produccion (06:00).
 - Tambien al iniciar sesion del operador dedicado (por ejemplo despues de un
   reinicio de Windows).
 - Si el horario se perdio, Windows intenta ejecutar la tarea en cuanto sea
@@ -126,3 +130,32 @@ Contactar soporte/IT cuando:
 Informacion util para soporte: hora del incidente, captura de /api/status,
 ultimas lineas de data\factory\vfreg.log y confirmacion de que la sesion del
 operador dedicado estaba iniciada (bloqueada o no).
+
+EJEMPLO SOLO PARA PRUEBAS EN CASA (NO USAR EN PLANTA)
+------------------------------------------------------
+Este bloque es para probar el instalador en una PC personal. No usar
+config.factory.json de planta ni el nombre de tarea de produccion en casa.
+
+1. Crear una carpeta de prueba, por ejemplo C:\VFREG-PRUEBA-CASA, con una copia
+   del ejecutable, un config.json de prueba (red/simulacion acordada con
+   soporte) y el script Install-VFREGScheduledTask.ps1.
+2. Validar sin registrar nada en Windows:
+
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install-VFREGScheduledTask.ps1 `
+     -ValidateOnly -DeploymentRoot "C:\VFREG-PRUEBA-CASA" -TaskName "VFREG-PRUEBA-CASA" `
+     -ConfigName "config.json" -DailyStartTime "08:30"
+
+3. Si la validacion es correcta y desea probar el registro local:
+
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install-VFREGScheduledTask.ps1 `
+     -DeploymentRoot "C:\VFREG-PRUEBA-CASA" -TaskName "VFREG-PRUEBA-CASA" `
+     -ConfigName "config.json" -DailyStartTime "08:30"
+
+4. Quitar la tarea de prueba:
+
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install-VFREGScheduledTask.ps1 `
+     -Remove -TaskName "VFREG-PRUEBA-CASA"
+
+Los horarios deben estar en formato HH:mm de 24 horas (por ejemplo 05:50 o
+23:15). Valores invalidos (25:00, 7:30, 05:60) son rechazados antes de
+modificar el Programador de tareas.

@@ -359,8 +359,9 @@ Goal: Operate unattended on the factory PC.
 - [x] Use Windows Task Scheduler for the initial unattended deployment and
   provide an installation script that creates or updates the task safely.
 - [ ] Start the collector every day at `05:50` so it is ready before production
-  begins at `06:00` (task definition sets 05:50 locally; factory PC trigger not
-  yet verified).
+  begins at `06:00` (script default `-DailyStartTime 05:50` and configurable
+  HH:mm validation delivered locally; home test 2026-09-06 validated alternate
+  daily triggers at 16:12 and 16:15; factory PC 05:50 trigger not yet verified).
 - [ ] Configure **Run task as soon as possible after a scheduled start is
   missed** and **Wake the computer to run this task** where company policy
   permits it (script sets both; factory PC validation pending).
@@ -376,9 +377,12 @@ Goal: Operate unattended on the factory PC.
 - [ ] Avoid opening duplicate dashboard or collector processes (IgnoreNew and
   single-instance lock configured locally; duplicate scheduled-task runtime not
   yet verified on factory PC).
-- [ ] Configure the scheduled task to keep the existing instance instead of
-  launching another one when the collector is already running (IgnoreNew in the
-  delivered script; production duplicate-run behavior not yet verified).
+- [x] Configure the scheduled task to keep the existing instance instead of
+  launching another one when the collector is already running (home test
+  2026-09-06: daily triggers at 16:12 and 16:15 started one simulator-safe
+  collector; second trigger preserved same PID under IgnoreNew; health/readings
+  stayed connected; cleanup removed task/processes; factory PC duplicate-run
+  behavior not yet verified).
 - [x] Provide a safe manual stop/restart procedure.
 
 ### Acceptance criteria

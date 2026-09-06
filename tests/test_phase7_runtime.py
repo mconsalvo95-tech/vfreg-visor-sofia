@@ -397,7 +397,8 @@ def _run_powershell_script(*args: str, cwd: Path | None = None) -> subprocess.Co
 class ScheduledTaskScriptTests(unittest.TestCase):
     def test_scheduler_script_exists_and_declares_contract(self) -> None:
         source = SCHEDULER_SCRIPT.read_text(encoding="utf-8")
-        self.assertIn('DailyStartTime = "05:50"', source)
+        self.assertIn('[string]$DailyStartTime = "05:50"', source)
+        self.assertIn("Test-VFREGDailyStartTime", source)
         self.assertIn('MultipleInstancesPolicy = "IgnoreNew"', source)
         self.assertIn("-LogonType Interactive", source)
         self.assertIn("-RunLevel Limited", source)
@@ -434,6 +435,55 @@ class ScheduledTaskScriptTests(unittest.TestCase):
             self.assertEqual(payload["config"], str(config_path.resolve()))
             self.assertIn("--no-browser", payload["arguments"])
             self.assertIn(f'--config "{config_path.resolve()}"', payload["arguments"])
+
+    def test_validate_only_accepts_custom_daily_start_time(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            exe_path = root / "VFREG-VISOR-SOFIA.exe"
+            config_path = root / "config.factory.json"
+            exe_path.write_bytes(b"MZ")
+            config_path.write_text(
+                json.dumps({"dashboard": {"host": "127.0.0.1", "port": 8000}}),
+                encoding="utf-8",
+            )
+            result = _run_powershell_script(
+                "-ValidateOnly",
+                "-DeploymentRoot",
+                str(root),
+                "-DailyStartTime",
+                "08:30",
+            )
+            self.assertEqual(result.returncode, 0, msg=result.stderr or result.stdout)
+            payload = json.loads(result.stdout.strip())
+            self.assertEqual(payload["daily_start"], "08:30")
+
+    def test_validate_only_rejects_invalid_daily_start_time(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            exe_path = root / "VFREG-VISOR-SOFIA.exe"
+            config_path = root / "config.factory.json"
+            exe_path.write_bytes(b"MZ")
+            config_path.write_text(
+                json.dumps({"dashboard": {"host": "127.0.0.1", "port": 8000}}),
+                encoding="utf-8",
+            )
+            for invalid_time in ("25:00", "7:30", "05:60", "noon"):
+                with self.subTest(invalid_time=invalid_time):
+                    result = _run_powershell_script(
+                        "-ValidateOnly",
+                        "-DeploymentRoot",
+                        str(root),
+                        "-DailyStartTime",
+                        invalid_time,
+                    )
+                    self.assertNotEqual(
+                        result.returncode, 0, msg=result.stderr or result.stdout
+                    )
+                    combined = re.sub(
+                        r"\s+", " ", f"{result.stdout} {result.stderr}"
+                    )
+                    self.assertIn("DailyStartTime", combined)
+                    self.assertIn("HH:mm", combined)
 
     def test_validate_only_with_remove_is_non_mutating(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -480,9 +530,12 @@ class OperatorRunbookTests(unittest.TestCase):
         text = OPERATOR_RUNBOOK.read_text(encoding="utf-8").lower()
         required = (
             "05:50",
+            "dailystarttime",
             "install-vfregscheduledtask.ps1",
             "-validateonly",
             "-remove",
+            "pruebas en casa",
+            "vfreg-prueba-casa",
             "win+l",
             "ctrl+c",
             "/api/status",
