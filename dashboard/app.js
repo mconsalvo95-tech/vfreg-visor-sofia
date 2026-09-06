@@ -5,8 +5,7 @@ const PAUSE_THRESHOLDS = Object.freeze({
 });
 
 const elements = {
-  siteName: document.querySelector("#site-name"),
-  deviceName: document.querySelector("#device-name"),
+  dashboardStatus: document.querySelector("#dashboard-status"),
   connection: document.querySelector("#connection"),
   connectionLabel: document.querySelector("#connection-label"),
   connectionDetail: document.querySelector("#connection-detail"),
@@ -108,8 +107,10 @@ let reportFormat = "xlsx";
 let chartExportInterval = "auto";
 let chartMode = "overview";
 let chartPoints = [];
+let chartPointIndex = -1;
 let rangeRequestId = 0;
 let historyRequestId = 0;
+let lastDashboardStatus = "";
 
 function isNumeric(value) {
   return value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
@@ -155,6 +156,12 @@ function updateSamplingEstimate(seconds) {
   const interval = Number(seconds);
   const readingsPerDay = interval > 0 ? Math.round(86400 / interval) : 0;
   elements.dailyReadingEstimate.textContent = `${readingsPerDay.toLocaleString("es-AR")} lecturas/día.`;
+}
+
+function announceDashboardStatus(message) {
+  if (message === lastDashboardStatus) return;
+  lastDashboardStatus = message;
+  elements.dashboardStatus.textContent = message;
 }
 
 function isProductionPaused(reading) {
@@ -332,6 +339,7 @@ function updateConnectionAndProcess(data, mode) {
   }[mode];
   elements.processState.textContent = processCopy[0];
   elements.processDetail.textContent = processCopy[1];
+  announceDashboardStatus(`${elements.connectionLabel.textContent}. ${processCopy[0]}.`);
 }
 
 function renderReadings(readings = historyReadings) {
@@ -397,8 +405,6 @@ function renderSampledHistory(readings) {
 function renderStatus(data) {
   const latest = data.latest;
   const mode = processMode(data);
-  elements.siteName.textContent = data.site_name;
-  elements.deviceName.textContent = data.device_name;
   elements.appVersion.textContent = `VFREG Visor ${data.app_version}`;
   elements.networkEndpoint.textContent = data.network.mode === "modbus_tcp_client"
     ? `Conexión: ${data.network.tcp_host}:${data.network.tcp_port}`
@@ -578,6 +584,7 @@ function drawChart(readings) {
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
   context.clearRect(0, 0, bounds.width, bounds.height);
   chartPoints = [];
+  chartPointIndex = -1;
   elements.emptyChart.hidden = chartReadings.length > 1;
   if (chartReadings.length < 2) return;
 
@@ -638,13 +645,8 @@ function drawChart(readings) {
   context.textAlign = "left";
 }
 
-function showChartTooltip(event) {
-  if (!chartPoints.length) return;
+function showChartTooltipForPoint(point) {
   const bounds = elements.canvas.getBoundingClientRect();
-  const pointerX = event.clientX - bounds.left;
-  const point = chartPoints.reduce((closest, candidate) =>
-    Math.abs(candidate.x - pointerX) < Math.abs(closest.x - pointerX) ? candidate : closest
-  );
   const reading = point.reading;
   elements.chartTooltip.innerHTML = `<strong>${timestampParts(reading.timestamp).full}</strong>${CHART_SERIES.map((series) =>
     `<span>${series.label}: ${number(reading[series.key], series.digits)} ${series.unit}</span>`
@@ -652,6 +654,31 @@ function showChartTooltip(event) {
   elements.chartTooltip.hidden = false;
   elements.chartTooltip.style.left = `${Math.min(bounds.width - 190, Math.max(8, point.x + 10))}px`;
   elements.chartTooltip.style.top = "12px";
+}
+
+function showChartTooltip(event) {
+  if (!chartPoints.length) return;
+  const bounds = elements.canvas.getBoundingClientRect();
+  const pointerX = event.clientX - bounds.left;
+  const point = chartPoints.reduce((closest, candidate) =>
+    Math.abs(candidate.x - pointerX) < Math.abs(closest.x - pointerX) ? candidate : closest
+  );
+  chartPointIndex = chartPoints.indexOf(point);
+  showChartTooltipForPoint(point);
+}
+
+function moveChartPoint(event) {
+  if (!chartPoints.length) return;
+  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  event.preventDefault();
+  if (event.key === "Home") chartPointIndex = 0;
+  else if (event.key === "End") chartPointIndex = chartPoints.length - 1;
+  else if (chartPointIndex < 0) chartPointIndex = event.key === "ArrowLeft" ? chartPoints.length - 1 : 0;
+  else chartPointIndex = Math.min(
+    chartPoints.length - 1,
+    Math.max(0, chartPointIndex + (event.key === "ArrowLeft" ? -1 : 1))
+  );
+  showChartTooltipForPoint(chartPoints[chartPointIndex]);
 }
 
 function showDashboardError(error) {
@@ -665,6 +692,7 @@ function showDashboardError(error) {
   elements.processDetail.textContent = "El recolector puede continuar en segundo plano; reintente esta pantalla.";
   updateMetrics(null, "disconnected");
   setBanner("danger", "No se pudo actualizar el dashboard", `Error local: ${error.message}`, "×", true);
+  announceDashboardStatus("Dashboard sin respuesta. Sin datos del dashboard.");
 }
 
 async function refresh() {
@@ -688,6 +716,7 @@ function setView(view) {
   document.querySelectorAll("[data-view]").forEach((button) => {
     const active = button.dataset.view === view;
     button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
     if (active) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
   });
@@ -772,12 +801,18 @@ function updateExportLinks() {
 
 function selectPresetButton() {
   document.querySelectorAll("[data-range-minutes]").forEach((button) => {
-    button.dataset.active = String(activeRange.key === `${button.dataset.rangeMinutes}m`);
+    const selected = activeRange.key === `${button.dataset.rangeMinutes}m`;
+    button.dataset.active = String(selected);
+    button.setAttribute("aria-pressed", String(selected));
   });
-  elements.workdayFilter.dataset.active = String(activeRange.key === "workday");
+  const workdaySelected = activeRange.key === "workday";
+  elements.workdayFilter.dataset.active = String(workdaySelected);
+  elements.workdayFilter.setAttribute("aria-pressed", String(workdaySelected));
   elements.customRangeToggle.dataset.active = String(activeRange.key === "custom");
   document.querySelectorAll("[data-report-scope]").forEach((button) => {
-    button.classList.toggle("is-selected", button.dataset.reportScope === activeRange.key);
+    const selected = button.dataset.reportScope === activeRange.key;
+    button.classList.toggle("is-selected", selected);
+    button.setAttribute("aria-pressed", String(selected));
   });
 }
 
@@ -845,13 +880,19 @@ function selectHistoryControls() {
   elements.historySourceLabel.textContent = sourceLabel;
   elements.historyMode.textContent = `${historyIntervalLabel()} · ${sourceLabel.toLowerCase()}`;
   document.querySelectorAll("[data-history-minutes]").forEach((button) => {
-    button.dataset.active = String(Number(button.dataset.historyMinutes) === historySampleMinutes);
+    const selected = Number(button.dataset.historyMinutes) === historySampleMinutes;
+    button.dataset.active = String(selected);
+    button.setAttribute("aria-pressed", String(selected));
   });
   document.querySelectorAll("[data-history-workday]").forEach((button) => {
-    button.dataset.active = String(historySourceRange.key === "workday");
+    const selected = historySourceRange.key === "workday";
+    button.dataset.active = String(selected);
+    button.setAttribute("aria-pressed", String(selected));
   });
   document.querySelectorAll("[data-history-custom]").forEach((button) => {
-    button.dataset.active = String(historySourceRange.key === "custom");
+    const selected = historySourceRange.key === "custom";
+    button.dataset.active = String(selected);
+    button.setAttribute("aria-pressed", String(selected));
   });
 }
 
@@ -1072,7 +1113,9 @@ function openHistoryCustomForm() {
 function setReportFormat(format) {
   reportFormat = format;
   document.querySelectorAll("[data-report-format]").forEach((button) => {
-    button.classList.toggle("is-selected", button.dataset.reportFormat === format);
+    const selected = button.dataset.reportFormat === format;
+    button.classList.toggle("is-selected", selected);
+    button.setAttribute("aria-pressed", String(selected));
   });
   updateReportSummary();
 }
@@ -1085,8 +1128,23 @@ function setChartExportInterval(value) {
     const selected = button.dataset.chartExportInterval === value;
     button.classList.toggle("is-selected", selected);
     button.setAttribute("aria-checked", String(selected));
+    button.tabIndex = selected ? 0 : -1;
   });
   updateReportSummary();
+}
+
+function moveChartExportIntervalFocus(event) {
+  const buttons = [...document.querySelectorAll("[data-chart-export-interval]")];
+  const current = buttons.indexOf(event.currentTarget);
+  let target = current;
+  if (event.key === "ArrowRight" || event.key === "ArrowDown") target = (current + 1) % buttons.length;
+  else if (event.key === "ArrowLeft" || event.key === "ArrowUp") target = (current - 1 + buttons.length) % buttons.length;
+  else if (event.key === "Home") target = 0;
+  else if (event.key === "End") target = buttons.length - 1;
+  else return;
+  event.preventDefault();
+  setChartExportInterval(buttons[target].dataset.chartExportInterval);
+  buttons[target].focus();
 }
 
 document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
@@ -1107,6 +1165,7 @@ elements.csvExport.addEventListener("click", () => setReportFormat("csv"));
 elements.xlsxExport.addEventListener("click", () => setReportFormat("xlsx"));
 document.querySelectorAll("[data-chart-export-interval]").forEach((button) => {
   button.addEventListener("click", () => setChartExportInterval(button.dataset.chartExportInterval));
+  button.addEventListener("keydown", moveChartExportIntervalFocus);
 });
 elements.pollInterval.addEventListener("change", () => updateSamplingEstimate(elements.pollInterval.value));
 elements.samplingForm.addEventListener("submit", savePollingInterval);
@@ -1143,7 +1202,11 @@ document.querySelectorAll("[data-report-scope]").forEach((button) => {
     if (scope === "workday") applyWorkday();
     else if (scope === "history") applyHistoricalRange();
     else {
-      document.querySelectorAll("[data-report-scope]").forEach((candidate) => candidate.classList.toggle("is-selected", candidate === button));
+      document.querySelectorAll("[data-report-scope]").forEach((candidate) => {
+        const selected = candidate === button;
+        candidate.classList.toggle("is-selected", selected);
+        candidate.setAttribute("aria-pressed", String(selected));
+      });
       openCustomForm(elements.reportCustomForm, elements.reportFrom, elements.reportTo);
     }
   });
@@ -1156,7 +1219,9 @@ document.querySelectorAll("[data-quality-filter]").forEach((button) => {
   button.addEventListener("click", () => {
     historyQuality = button.dataset.qualityFilter;
     document.querySelectorAll("[data-quality-filter]").forEach((candidate) => {
-      candidate.dataset.active = String(candidate === button);
+      const selected = candidate === button;
+      candidate.dataset.active = String(selected);
+      candidate.setAttribute("aria-pressed", String(selected));
     });
     renderReadings(historyReadings);
   });
@@ -1165,7 +1230,9 @@ document.querySelectorAll("[data-chart-mode]").forEach((button) => {
   button.addEventListener("click", () => {
     chartMode = button.dataset.chartMode;
     document.querySelectorAll("[data-chart-mode]").forEach((candidate) => {
-      candidate.dataset.active = String(candidate === button);
+      const selected = candidate === button;
+      candidate.dataset.active = String(selected);
+      candidate.setAttribute("aria-pressed", String(selected));
     });
     drawChart(currentReadings);
   });
@@ -1175,12 +1242,16 @@ elements.chartReset.addEventListener("click", () => {
   chartMode = "overview";
   elements.chartZoom.value = "1";
   document.querySelectorAll("[data-chart-mode]").forEach((button) => {
-    button.dataset.active = String(button.dataset.chartMode === "overview");
+    const selected = button.dataset.chartMode === "overview";
+    button.dataset.active = String(selected);
+    button.setAttribute("aria-pressed", String(selected));
   });
   drawChart(currentReadings);
 });
 elements.canvas.addEventListener("pointermove", showChartTooltip);
 elements.canvas.addEventListener("pointerleave", () => { elements.chartTooltip.hidden = true; });
+elements.canvas.addEventListener("keydown", moveChartPoint);
+elements.canvas.addEventListener("blur", () => { elements.chartTooltip.hidden = true; });
 window.addEventListener("resize", () => {
   if (currentView === "live") {
     drawChart(currentReadings);

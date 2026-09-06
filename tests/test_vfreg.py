@@ -918,7 +918,7 @@ class StatusTests(unittest.TestCase):
                     dashboard_html = response.read().decode("utf-8")
                 self.assertIn('id="app-version"', dashboard_html)
                 self.assertIn('id="history-filter-form"', dashboard_html)
-                self.assertIn(">Support</a>", dashboard_html)
+                self.assertIn(">Soporte</a>", dashboard_html)
                 with open(config_path, "r", encoding="utf-8") as handle:
                     saved = json.load(handle)
                 self.assertEqual(

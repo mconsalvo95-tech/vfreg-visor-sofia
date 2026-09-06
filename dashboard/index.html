@@ -15,14 +15,14 @@
       <div class="logo-placeholder" aria-label="Espacio reservado para el logo de la empresa">LOGO</div>
       <div class="brand-copy">
         <span class="brand-kicker">Sistema de monitoreo</span>
-        <strong>VFREG <span>· SOFIA</span></strong>
+        <strong>Frigorífico SOFIA</strong>
       </div>
     </div>
 
     <nav class="primary-nav" aria-label="Secciones principales">
-      <button class="nav-button is-active" type="button" data-view="live" aria-current="page">Monitoreo en vivo</button>
-      <button class="nav-button" type="button" data-view="history">Historial</button>
-      <button class="nav-button" type="button" data-view="reports">Reportes</button>
+      <button class="nav-button is-active" type="button" data-view="live" aria-controls="view-live" aria-current="page" aria-pressed="true">Monitoreo en vivo</button>
+      <button class="nav-button" type="button" data-view="history" aria-controls="view-history" aria-pressed="false">Historial</button>
+      <button class="nav-button" type="button" data-view="reports" aria-controls="view-reports" aria-pressed="false">Reportes</button>
     </nav>
 
     <div class="topbar-meta">
@@ -30,7 +30,7 @@
         <strong id="current-time">--:--:--</strong>
         <span id="current-date">--</span>
       </div>
-      <div class="connection-pill" id="connection" data-state="WAITING" data-process="waiting" role="status" aria-live="polite">
+      <div class="connection-pill" id="connection" data-state="WAITING" data-process="waiting">
         <span class="connection-symbol" aria-hidden="true">…</span>
         <span>
           <strong id="connection-label">Iniciando</strong>
@@ -41,12 +41,12 @@
   </header>
 
   <main id="main-content">
+    <p class="sr-only" id="dashboard-status" role="status" aria-atomic="true"></p>
     <section class="app-view is-active" id="view-live" data-view-panel="live">
       <div class="page-heading">
         <div>
           <p class="eyebrow">Sala de insensibilización</p>
           <h1>Estado del proceso</h1>
-          <p class="page-subtitle"><span id="site-name">Recolector VFREG</span> · <span id="device-name">Visor VFREG</span></p>
         </div>
         <div class="reading-stamp">
           <span>Última lectura</span>
@@ -77,7 +77,7 @@
         </form>
       </section>
 
-      <div class="system-banner" id="system-banner" data-state="info" role="status">
+      <div class="system-banner" id="system-banner" data-state="info" role="region" aria-labelledby="banner-title">
         <span class="banner-icon" id="banner-icon" aria-hidden="true">…</span>
         <div>
           <strong id="banner-title">Iniciando monitoreo</strong>
@@ -132,10 +132,10 @@
           <div><p class="eyebrow">Tendencias</p><h2 id="live-chart-title">Comportamiento en el tiempo</h2></div>
           <div class="chart-actions">
             <div class="chart-modes" aria-label="Variable del gráfico">
-              <button type="button" data-chart-mode="overview" data-active="true">Resumen</button>
-              <button type="button" data-chart-mode="voltage_v">Voltaje</button>
-              <button type="button" data-chart-mode="current_ma">Corriente</button>
-              <button type="button" data-chart-mode="frequency_hz">Frecuencia</button>
+              <button type="button" data-chart-mode="overview" data-active="true" aria-pressed="true">Resumen</button>
+              <button type="button" data-chart-mode="voltage_v" aria-pressed="false">Voltaje</button>
+              <button type="button" data-chart-mode="current_ma" aria-pressed="false">Corriente</button>
+              <button type="button" data-chart-mode="frequency_hz" aria-pressed="false">Frecuencia</button>
             </div>
             <label class="zoom-control" for="chart-zoom">Zoom <input id="chart-zoom" type="range" min="1" max="4" step="1" value="1"></label>
             <button class="secondary-button chart-reset" id="chart-reset" type="button">Restablecer</button>
@@ -145,11 +145,11 @@
           <div class="range-picker">
             <div class="range-current"><span>Mostrar datos de</span><strong id="active-range-label">Últimos 15 minutos</strong></div>
             <div class="preset-filters" aria-label="Períodos rápidos">
-              <button type="button" data-range-minutes="5">5 min</button>
-              <button type="button" data-range-minutes="15" data-active="true">15 min</button>
-              <button type="button" data-range-minutes="30">30 min</button>
-              <button type="button" data-range-minutes="60">1 hora</button>
-              <button type="button" id="workday-filter">Jornada actual</button>
+              <button type="button" data-range-minutes="5" aria-pressed="false">5 min</button>
+              <button type="button" data-range-minutes="15" data-active="true" aria-pressed="true">15 min</button>
+              <button type="button" data-range-minutes="30" aria-pressed="false">30 min</button>
+              <button type="button" data-range-minutes="60" aria-pressed="false">1 hora</button>
+              <button type="button" id="workday-filter" aria-pressed="false">Jornada actual</button>
               <button type="button" id="custom-range-toggle" aria-expanded="false" aria-controls="history-filter-form">Personalizado</button>
             </div>
           </div>
@@ -167,7 +167,7 @@
           <span class="legend-frequency">Frecuencia</span>
         </div>
         <div class="chart-wrap">
-          <canvas id="history-chart" aria-label="Gráfico reciente de voltaje, corriente y frecuencia"></canvas>
+          <canvas id="history-chart" role="img" tabindex="0" aria-label="Gráfico reciente de voltaje, corriente y frecuencia. Use las flechas para recorrer las lecturas."></canvas>
           <p class="empty-chart" id="empty-chart">Esperando lecturas</p>
           <div class="chart-tooltip" id="chart-tooltip" role="status" hidden></div>
         </div>
@@ -184,17 +184,17 @@
         <div class="history-period-control">
           <div><span class="control-label">Intervalo de muestra</span><strong id="history-period-label">Cada 15 minutos</strong></div>
           <div class="preset-filters" aria-label="Cambiar intervalo de muestra del historial">
-            <button type="button" data-history-minutes="5">5 min</button>
-            <button type="button" data-history-minutes="15" data-active="true">15 min</button>
-            <button type="button" data-history-minutes="30">30 min</button>
-            <button type="button" data-history-minutes="60">1 hora</button>
+            <button type="button" data-history-minutes="5" aria-pressed="false">5 min</button>
+            <button type="button" data-history-minutes="15" data-active="true" aria-pressed="true">15 min</button>
+            <button type="button" data-history-minutes="30" aria-pressed="false">30 min</button>
+            <button type="button" data-history-minutes="60" aria-pressed="false">1 hora</button>
           </div>
         </div>
         <div class="history-period-control history-source-control">
           <div><span class="control-label">Datos desde</span><strong id="history-source-label">Inicio de jornada</strong></div>
           <div class="preset-filters" aria-label="Cambiar origen del historial">
-            <button type="button" data-history-workday>Jornada actual</button>
-            <button type="button" data-history-custom>Personalizado</button>
+            <button type="button" data-history-workday aria-pressed="true">Jornada actual</button>
+            <button type="button" data-history-custom aria-pressed="false">Personalizado</button>
           </div>
         </div>
         <form class="custom-filter" id="history-view-filter-form" hidden>
@@ -206,9 +206,9 @@
         </form>
         <div class="quality-filters" role="group" aria-label="Filtrar por calidad">
           <span>Calidad</span>
-          <button type="button" data-quality-filter="all" data-active="true">Todas</button>
-          <button type="button" data-quality-filter="valid">Válidas</button>
-          <button type="button" data-quality-filter="alarm">Fuera de rango</button>
+          <button type="button" data-quality-filter="all" data-active="true" aria-pressed="true">Todas</button>
+          <button type="button" data-quality-filter="valid" aria-pressed="false">Válidas</button>
+          <button type="button" data-quality-filter="alarm" aria-pressed="false">Fuera de rango</button>
         </div>
         <div class="filter-feedback">
           <strong id="history-mode">Cada 15 minutos desde el inicio de jornada</strong>
@@ -239,13 +239,13 @@
         <div class="report-step">
           <div class="step-heading"><span>1</span><div><strong>Seleccione el período</strong><small>Qué lecturas desea descargar</small></div></div>
           <div class="scope-cards">
-            <button class="scope-card" type="button" data-report-scope="workday">
+            <button class="scope-card" type="button" data-report-scope="workday" aria-pressed="false">
               <span class="scope-icon" aria-hidden="true">06</span><strong>Jornada actual</strong><small>Desde las 06:00 hasta ahora</small><b>Datos de hoy</b>
             </button>
-            <button class="scope-card" type="button" data-report-scope="history">
+            <button class="scope-card" type="button" data-report-scope="history" aria-pressed="false">
               <span class="scope-icon" aria-hidden="true">∞</span><strong>Histórico completo</strong><small>Todos los datos almacenados</small><b>Sin fecha inicial</b>
             </button>
-            <button class="scope-card" type="button" data-report-scope="custom">
+            <button class="scope-card" type="button" data-report-scope="custom" aria-pressed="false">
               <span class="scope-icon" aria-hidden="true">↔</span><strong>Período personalizado</strong><small>Elija fecha y hora de inicio y fin</small><b>Configurar período</b>
             </button>
           </div>
@@ -260,10 +260,10 @@
         <div class="report-step">
           <div class="step-heading"><span>2</span><div><strong>Seleccione el formato</strong><small>Cómo desea utilizar los datos</small></div></div>
           <div class="format-cards">
-            <button class="format-card" id="csv-export" type="button" data-report-format="csv">
+            <button class="format-card" id="csv-export" type="button" data-report-format="csv" aria-pressed="false">
               <span class="file-mark">CSV</span><span><strong>Datos sin procesar</strong><small>Fecha, hora y las tres mediciones.</small></span><b class="selection-mark" aria-hidden="true">✓</b>
             </button>
-            <button class="format-card is-selected" id="xlsx-export" type="button" data-report-format="xlsx">
+            <button class="format-card is-selected" id="xlsx-export" type="button" data-report-format="xlsx" aria-pressed="true">
               <span class="file-mark excel">XLSX</span><span><strong>Excel + gráficos</strong><small>Lecturas y tres gráficos separados para revisión.</small></span><b class="selection-mark" aria-hidden="true">✓</b>
             </button>
           </div>
@@ -272,12 +272,12 @@
         <div class="report-step" id="chart-interval-step">
           <div class="step-heading"><span>3</span><div><strong>Intervalo de los gráficos</strong><small>Define cuánto tiempo resume cada punto del gráfico</small></div></div>
           <div class="chart-interval-options" role="radiogroup" aria-label="Intervalo de los gráficos exportados">
-            <button class="chart-interval-option is-selected" type="button" data-chart-export-interval="auto" role="radio" aria-checked="true">Automático</button>
-            <button class="chart-interval-option" type="button" data-chart-export-interval="1" role="radio" aria-checked="false">Cada 1 min</button>
-            <button class="chart-interval-option" type="button" data-chart-export-interval="5" role="radio" aria-checked="false">Cada 5 min</button>
-            <button class="chart-interval-option" type="button" data-chart-export-interval="10" role="radio" aria-checked="false">Cada 10 min</button>
-            <button class="chart-interval-option" type="button" data-chart-export-interval="15" role="radio" aria-checked="false">Cada 15 min</button>
-            <button class="chart-interval-option" type="button" data-chart-export-interval="30" role="radio" aria-checked="false">Cada 30 min</button>
+            <button class="chart-interval-option is-selected" type="button" data-chart-export-interval="auto" role="radio" aria-checked="true" tabindex="0">Automático</button>
+            <button class="chart-interval-option" type="button" data-chart-export-interval="1" role="radio" aria-checked="false" tabindex="-1">Cada 1 min</button>
+            <button class="chart-interval-option" type="button" data-chart-export-interval="5" role="radio" aria-checked="false" tabindex="-1">Cada 5 min</button>
+            <button class="chart-interval-option" type="button" data-chart-export-interval="10" role="radio" aria-checked="false" tabindex="-1">Cada 10 min</button>
+            <button class="chart-interval-option" type="button" data-chart-export-interval="15" role="radio" aria-checked="false" tabindex="-1">Cada 15 min</button>
+            <button class="chart-interval-option" type="button" data-chart-export-interval="30" role="radio" aria-checked="false" tabindex="-1">Cada 30 min</button>
           </div>
           <p class="chart-interval-help">Ejemplo: “Cada 5 min” crea un punto con el promedio de 12:00 a 12:04:59. Raw Data siempre conserva todas las lecturas. El eje muestra solo algunas horas para evitar superponer textos.</p>
         </div>
@@ -335,7 +335,7 @@
         <span id="network-endpoint">Conexión: cargando…</span>
         <span id="storage-health">Almacenamiento: iniciando…</span>
         <span id="app-version">Versión cargando…</span>
-        <a href="https://github.com/mconsalvo95-tech/vfreg-visor-sofia" target="_blank" rel="noreferrer">Support</a>
+        <a href="https://github.com/mconsalvo95-tech/vfreg-visor-sofia" target="_blank" rel="noreferrer">Soporte</a>
       </div>
     </details>
   </main>

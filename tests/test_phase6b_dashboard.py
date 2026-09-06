@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import unittest
 from html.parser import HTMLParser
 from pathlib import Path
@@ -32,6 +33,21 @@ class _DashboardParser(HTMLParser):
 
 
 class Phase6BDashboardTests(unittest.TestCase):
+    @staticmethod
+    def _contrast(foreground: str, background: str) -> float:
+        def luminance(value: str) -> float:
+            channels = [int(value[index : index + 2], 16) / 255 for index in (1, 3, 5)]
+            linear = [
+                channel / 12.92
+                if channel <= 0.04045
+                else ((channel + 0.055) / 1.055) ** 2.4
+                for channel in channels
+            ]
+            return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+        light, dark = sorted((luminance(foreground), luminance(background)), reverse=True)
+        return (light + 0.05) / (dark + 0.05)
+
     def test_operator_shell_is_spanish_and_has_unique_ids(self) -> None:
         parser = _DashboardParser()
         parser.feed((DASHBOARD_ROOT / "index.html").read_text(encoding="utf-8"))
@@ -69,6 +85,76 @@ class Phase6BDashboardTests(unittest.TestCase):
         self.assertNotIn("192.168.1.7", combined)
         self.assertNotIn("/api/modbus", combined)
         self.assertNotIn("function_code", combined)
+
+    def test_approved_header_and_product_identity(self) -> None:
+        html = (DASHBOARD_ROOT / "index.html").read_text(encoding="utf-8")
+        javascript = (DASHBOARD_ROOT / "app.js").read_text(encoding="utf-8")
+
+        self.assertIn("Sistema de monitoreo", html)
+        self.assertIn("Frigorífico SOFIA", html)
+        self.assertNotIn('id="site-name"', html)
+        self.assertNotIn('id="device-name"', html)
+        self.assertNotIn("Chicken processing", html)
+        self.assertNotIn("VFREG-SIM", html)
+        self.assertIn("<title>VFREG · SOFIA</title>", html)
+        self.assertIn(">Soporte</a>", html)
+        self.assertRegex(html, r"<footer>.*VFREG · SOFIA.*Monitor local de solo lectura", re.DOTALL)
+        self.assertNotIn("siteName", javascript)
+        self.assertNotIn("deviceName", javascript)
+
+    def test_controls_have_native_keyboard_semantics_and_selection_cues(self) -> None:
+        html = (DASHBOARD_ROOT / "index.html").read_text(encoding="utf-8")
+        javascript = (DASHBOARD_ROOT / "app.js").read_text(encoding="utf-8")
+        styles = (DASHBOARD_ROOT / "styles.css").read_text(encoding="utf-8")
+        buttons = re.findall(r"<button\b([^>]*)>(.*?)</button>", html, flags=re.DOTALL)
+
+        self.assertTrue(buttons)
+        for attributes, contents in buttons:
+            self.assertRegex(attributes, r'\btype="(?:button|submit)"')
+            self.assertTrue(re.sub(r"<[^>]+>", "", contents).strip())
+        for control_id in (
+            "poll-interval",
+            "chart-zoom",
+            "history-from",
+            "history-to",
+            "history-view-from",
+            "history-view-to",
+            "report-from",
+            "report-to",
+        ):
+            self.assertRegex(html, rf'<label[^>]*for="{control_id}"')
+        self.assertIn('id="dashboard-status" role="status" aria-atomic="true"', html)
+        self.assertIn('role="radiogroup"', html)
+        self.assertIn('tabindex="0"', html)
+        self.assertIn('tabindex="-1"', html)
+        self.assertIn("function moveChartExportIntervalFocus", javascript)
+        self.assertIn('button.addEventListener("keydown", moveChartExportIntervalFocus)', javascript)
+        self.assertIn("function moveChartPoint", javascript)
+        self.assertIn('elements.canvas.addEventListener("keydown", moveChartPoint)', javascript)
+        self.assertIn('button.setAttribute("aria-pressed", String(selected))', javascript)
+        self.assertIn('content: "✓ ";', styles)
+
+    def test_dashboard_focus_and_text_colors_meet_contrast_targets(self) -> None:
+        styles = (DASHBOARD_ROOT / "styles.css").read_text(encoding="utf-8")
+        for color in ("--voltage-ink: #006d77", "--frequency-ink: #8a5200"):
+            self.assertIn(color, styles)
+
+        for foreground, background in (
+            ("#13252e", "#ffffff"),
+            ("#657780", "#ffffff"),
+            ("#0b8290", "#ffffff"),
+            ("#14784e", "#ffffff"),
+            ("#9b5c0a", "#ffffff"),
+            ("#b33a36", "#ffffff"),
+            ("#006d77", "#e5f6f7"),
+            ("#7255a5", "#f0ecf8"),
+            ("#8a5200", "#fff3df"),
+        ):
+            self.assertGreaterEqual(self._contrast(foreground, background), 4.5)
+        self.assertGreaterEqual(self._contrast("#073b53", "#ffffff"), 3.0)
+        self.assertIn("outline: 3px solid var(--navy)", styles)
+        self.assertIn("box-shadow: 0 0 0 5px #fff", styles)
+        self.assertIn("#history-chart:focus-visible", styles)
 
 
 if __name__ == "__main__":

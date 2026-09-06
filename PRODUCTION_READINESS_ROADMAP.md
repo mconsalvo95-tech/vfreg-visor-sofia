@@ -297,8 +297,10 @@ management exports without changing collection, storage, or device behavior.
 
 - [ ] Test the approved implementation at the production PC's screen size and
   browser zoom.
-- [ ] Verify keyboard operation, readable Spanish operator labels, contrast,
-  focus states, and non-color status cues.
+- [x] Verify keyboard operation, readable Spanish operator labels, contrast,
+  focus states, and non-color status cues. *(Local: static HTML/JS/CSS checks,
+  WCAG AA contrast regression in `test_phase6b_dashboard`, and approved header
+  identity test; interactive Tab/keyboard/screen-reader pass still required.)*
 - [ ] Verify all Phase 6 export scopes while collection continues.
 - [ ] Review the finished phase with a normal operator and manager before final
   merge.
