@@ -16,9 +16,24 @@ release.
   simulator started; simulator stop/restart preserved collector PID/listeners
   and cycled DISCONNECTED then CONNECTED; HOME-TEST Task Scheduler stop/start
   passed (task End abrupt, not graceful); all tasks/processes cleaned up.
+- Home validation 2026-09-07 H5 sleep/wake (UDP/VFREG-SIM): first attempt —
+  WakeToRun did not wake under AC RTCWAKE=2 important-only; manual wake
+  triggered StartWhenAvailable collector launch and data recovery; retry with
+  temporary AC RTCWAKE=1 — PC auto-woke via NT TASK HOME-TEST at 00:41:23,
+  collector 00:41:30, VFREG-SIM resumed, SQLite 948→1547, display off but
+  backend healthy, original AC=2 restored, cleanup passed.
+- Home validation 2026-09-07 H6 reboot/logon (UDP/VFREG-SIM): boot 00:56:24,
+  same-user logon 00:57:08, task LastRunTime 00:57:11, collector 00:57:45
+  without simulator (DISCONNECTED but listener/writer healthy), simulator later
+  connected with same collector PID, SQLite 1573→1578, cleanup passed; Task
+  Scheduler Operational log was empty despite strong attribution.
+- Operator runbook expanded: WakeToRun requires IT-approved AC wake-timer
+  policy; important-only may block wake; scheduled wakes may leave display off
+  while collection runs; installer does not change power policy; Task Scheduler
+  End/Stop is abrupt — use console Ctrl+C for normal shutdown.
 - Factory gates still open: real Ethernet/NT1-B reconnect, daily 05:50 trigger,
-  sleep/wake, reboot/logon, locked-session, and operator UI validation on the
-  production PC.
+  production sleep/wake under IT power policy, locked-session, operator/manager
+  UI validation, network-adapter reset, and multi-day soak on the production PC.
 
 ## 0.4.0.dev1 — 2026-09-06
 

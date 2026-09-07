@@ -60,6 +60,21 @@ La tarea "VFREG-VISOR-SOFIA" hace lo siguiente:
 El colector puede iniciar antes de que el VFREG/NT1-B este encendido o
 alcanzable; reconectara automaticamente cuando el equipo este disponible.
 
+ENERGIA, DESPERTAR Y POLITICA DE IT
+-----------------------------------
+- WakeToRun solo funciona si Windows y la politica de energia de IT permiten
+  despertadores de temporizador normales con la PC conectada a corriente (AC).
+- La opcion "Permitir despertadores de temporizador solo importantes" puede
+  impedir que la tarea despierte la PC; IT debe confirmarlo en la PC de planta.
+- Un despertar programado puede dejar la pantalla apagada mientras el colector
+  ya funciona en segundo plano; verificar http://127.0.0.1:8000/api/status si
+  hay duda.
+- El instalador NO modifica la politica de energia de Windows; cualquier cambio
+  requiere aprobacion explicita de IT/planta en la PC de produccion.
+- Con bateria (portatil o sin AC), Windows puede no despertar la PC para
+  tareas programadas; la PC dedicada de planta debe permanecer conectada a
+  corriente.
+
 INICIO MANUAL (OPERADOR)
 ------------------------
 Para abrir el tablero en el navegador durante la jornada:
@@ -74,16 +89,24 @@ Luego abrir http://127.0.0.1:8000 si el navegador no se abrio solo.
 
 DETENER O REINICIAR DE FORMA SEGURA
 -----------------------------------
-Detener:
+Detener (metodo normal):
 1. Localizar la ventana de consola "VFREG-VISOR-SOFIA" o "VFREG Visor".
 2. Presionar Ctrl+C una vez y esperar el mensaje de cierre ordenado.
 3. No usar "Finalizar tarea" del Administrador de tareas salvo indicacion de
    soporte.
 
+Detener desde el Programador de tareas (End/Detener):
+- Es un corte abrupto; no garantiza cierre ordenado ni vaciado de la cola.
+- Usar solo cuando soporte lo indique; el metodo normal del operador es Ctrl+C
+  en la consola del colector.
+
 Reiniciar:
-1. Detener como arriba.
+1. Detener como arriba (preferir Ctrl+C).
 2. Iniciar de nuevo con "Start VFREG Visor.bat" o esperar la proxima ejecucion
    de la tarea programada / el siguiente inicio de sesion.
+
+No matar procesos del colector ni borrar archivos internos de mediciones o
+bloqueo salvo indicacion explicita de soporte.
 
 Durante mantenimiento de base de datos o respaldos, soporte puede pedir que el
 colector permanezca detenido; seguir siempre sus instrucciones.

@@ -1,6 +1,6 @@
 # VFREG Visor — Production Readiness Roadmap
 
-Last updated: 2026-09-06
+Last updated: 2026-09-07
 
 Current status: Phase 6B functional foundation complete; approved brand assets
 and stakeholder review are pending
@@ -355,8 +355,11 @@ Goal: Operate unattended on the factory PC.
   validate real Ethernet cable disconnect).
 - [ ] Verify automatic reconnection after the NT1-B is rebooted (factory
   hardware validation pending).
-- [ ] Verify recovery after Windows sleep or network-adapter reset (factory
-  PC validation pending).
+- [ ] Verify recovery after Windows sleep or network-adapter reset (home test
+  2026-09-07: sleep/WakeToRun retry passed — temporary AC RTCWAKE=1 auto-wake
+  at 00:41:23, collector 00:41:30, SQLite 948→1547, display off but backend
+  healthy; first attempt failed under AC RTCWAKE=2 important-only; factory PC
+  network-adapter reset and production sleep policy still pending).
 - [x] Add graceful shutdown and confirm queued records are flushed (home test
   2026-09-06: frozen portable exe CTRL+BREAK stop exit 0 ~1.05s; final stopped
   JSON log; queue drained; SQLite rows 646→652; WAL 0; listening ports free).
@@ -371,10 +374,15 @@ Goal: Operate unattended on the factory PC.
   daily triggers at 16:12 and 16:15; factory PC 05:50 trigger not yet verified).
 - [ ] Configure **Run task as soon as possible after a scheduled start is
   missed** and **Wake the computer to run this task** where company policy
-  permits it (script sets both; factory PC validation pending).
-- [ ] Add a Windows startup or user-logon trigger so a restart also returns the
-  collector to service without waiting until the following day (logon trigger
-  configured in script locally; production restart behavior not yet verified).
+  permits it (script sets both; home test 2026-09-07: WakeToRun failed under AC
+  RTCWAKE=2 important-only; manual wake recovered via StartWhenAvailable;
+  retry with temporary RTCWAKE=1 auto-woke and collector resumed; factory IT
+  power-policy confirmation pending).
+- [x] Add a Windows startup or user-logon trigger so a restart also returns the
+  collector to service without waiting until the following day (home test
+  2026-09-07 only: reboot 00:56:24, same-user logon 00:57:08, task LastRunTime
+  00:57:11, collector 00:57:45 without simulator then reconnected same PID,
+  SQLite 1573→1578; factory PC restart behavior not yet verified).
 - [ ] Document that the initial portable deployment requires the dedicated
   Windows operator account to remain signed in; locking the session is allowed
   (documented in operator runbook; locked-session operation not yet verified on
