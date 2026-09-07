@@ -6,6 +6,7 @@ import logging
 import signal
 import sys
 import threading
+import time
 import webbrowser
 from collections.abc import Callable
 from datetime import datetime
@@ -24,6 +25,10 @@ from .instance import DeploymentInstanceLock, InstanceAlreadyRunning
 from .network import start_network_servers
 from .operational_log import configure_operational_logging
 from .storage import StorageError, StorageWriter
+from .windows_console import (
+    install_windows_console_shutdown_handler,
+    uninstall_windows_console_shutdown_handler,
+)
 
 
 class StartupError(RuntimeError):
@@ -31,6 +36,8 @@ class StartupError(RuntimeError):
 
 
 _DASHBOARD_JOIN_TIMEOUT_SECONDS = 0.5
+_SHUTDOWN_CLEANUP_TIMEOUT_SECONDS = 5.0
+_NATIVE_CONSOLE_CLEANUP_BUDGET_SECONDS = 4.0
 
 
 def _install_windows_console_interrupt_handlers() -> None:
@@ -40,6 +47,14 @@ def _install_windows_console_interrupt_handlers() -> None:
     if threading.current_thread() is not threading.main_thread():
         raise RuntimeError("Windows signal handlers must be installed from the main thread")
     signal.signal(signal.SIGBREAK, signal.default_int_handler)
+
+
+def _install_windows_shutdown_handlers(
+    shutdown_requested: threading.Event,
+    cleanup_complete: threading.Event,
+) -> None:
+    _install_windows_console_interrupt_handlers()
+    install_windows_console_shutdown_handler(shutdown_requested, cleanup_complete)
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -76,15 +91,21 @@ def _graceful_shutdown(
     writer: StorageWriter | None,
     logger: logging.Logger,
     serve_thread: threading.Thread,
-    shutdown_timeout: float = 5.0,
+    cleanup_budget_seconds: float = _SHUTDOWN_CLEANUP_TIMEOUT_SECONDS,
+    cleanup_complete: threading.Event | None = None,
 ) -> None:
     """Stop collection, drain HTTP handlers, then checkpoint storage.
 
-    Every stage runs even when an earlier stage fails. The first failure is
-    retained and re-raised after cleanup so socket close and final logging still
-    happen when storage shutdown fails.
+    Bounded stages share one monotonic cleanup deadline. Every stage runs even
+    when an earlier stage fails. The first failure is retained and re-raised
+    after cleanup so socket close and final logging still happen when storage
+    shutdown fails.
     """
+    deadline = time.monotonic() + cleanup_budget_seconds
     primary_error: BaseException | None = None
+
+    def _remaining_seconds() -> float:
+        return max(0.0, deadline - time.monotonic())
 
     def _record_stage_error(stage: str, error: BaseException) -> None:
         nonlocal primary_error
@@ -95,34 +116,46 @@ def _graceful_shutdown(
         except Exception:
             pass
 
-    if collector is not None:
-        try:
-            collector.stop()
-        except BaseException as error:
-            _record_stage_error("collector", error)
-
     try:
-        if serve_thread.is_alive():
-            # shutdown() must not run on the thread blocked in serve_forever().
-            server.shutdown()
-            serve_thread.join(timeout=shutdown_timeout)
-        server.server_close()
-    except BaseException as error:
-        _record_stage_error("dashboard", error)
+        if collector is not None:
+            try:
+                collector.stop()
+            except BaseException as error:
+                _record_stage_error("collector", error)
 
-    if writer is not None:
         try:
-            writer.close(timeout=shutdown_timeout)
+            if serve_thread.is_alive():
+                # shutdown() must not run on the thread blocked in serve_forever().
+                server.shutdown()
+                serve_thread.join(timeout=_remaining_seconds())
+                if serve_thread.is_alive():
+                    _record_stage_error(
+                        "dashboard",
+                        TimeoutError(
+                            "Dashboard thread did not stop within "
+                            f"{cleanup_budget_seconds:.1f}s cleanup budget during shutdown"
+                        ),
+                    )
+            server.server_close()
         except BaseException as error:
-            _record_stage_error("storage", error)
+            _record_stage_error("dashboard", error)
 
-    try:
-        logger.info("VFREG Visor stopped")
-    except Exception:
-        pass
+        if writer is not None:
+            try:
+                writer.close(timeout=_remaining_seconds())
+            except BaseException as error:
+                _record_stage_error("storage", error)
 
-    if primary_error is not None:
-        raise primary_error
+        try:
+            logger.info("VFREG Visor stopped")
+        except Exception:
+            pass
+
+        if primary_error is not None:
+            raise primary_error
+    finally:
+        if cleanup_complete is not None:
+            cleanup_complete.set()
 
 
 def open_dashboard(
@@ -144,6 +177,8 @@ def run(
     *,
     open_browser: bool = False,
     browser_opener: Callable[[str], bool] = webbrowser.open_new_tab,
+    shutdown_requested: threading.Event | None = None,
+    cleanup_complete: threading.Event | None = None,
 ) -> None:
     resolved_config = Path(config_path).resolve()
     cfg = load_config(resolved_config)
@@ -237,28 +272,42 @@ def run(
             serve_thread.start()
             try:
                 while serve_thread.is_alive():
+                    if shutdown_requested is not None and shutdown_requested.is_set():
+                        print("\nStopping VFREG dashboard.")
+                        break
                     serve_thread.join(timeout=_DASHBOARD_JOIN_TIMEOUT_SECONDS)
             except KeyboardInterrupt:
                 print("\nStopping VFREG dashboard.")
         finally:
             if serve_thread is not None:
+                cleanup_budget_seconds = (
+                    _NATIVE_CONSOLE_CLEANUP_BUDGET_SECONDS
+                    if shutdown_requested is not None and shutdown_requested.is_set()
+                    else _SHUTDOWN_CLEANUP_TIMEOUT_SECONDS
+                )
                 _graceful_shutdown(
                     collector=collector,
                     server=server,
                     writer=writer,
                     logger=logger,
                     serve_thread=serve_thread,
+                    cleanup_budget_seconds=cleanup_budget_seconds,
+                    cleanup_complete=cleanup_complete,
                 )
             else:
-                if collector is not None:
-                    collector.stop()
-                if writer is not None:
-                    writer.close()
-                server.server_close()
                 try:
-                    logger.info("VFREG Visor stopped")
-                except Exception:
-                    pass
+                    if collector is not None:
+                        collector.stop()
+                    if writer is not None:
+                        writer.close()
+                    server.server_close()
+                    try:
+                        logger.info("VFREG Visor stopped")
+                    except Exception:
+                        pass
+                finally:
+                    if cleanup_complete is not None:
+                        cleanup_complete.set()
 
 
 def main(
@@ -266,17 +315,26 @@ def main(
     *,
     open_browser: bool = False,
 ) -> int:
-    _install_windows_console_interrupt_handlers()
-    args = parse_args(argv)
+    shutdown_requested = threading.Event()
+    cleanup_complete = threading.Event()
     try:
+        _install_windows_shutdown_handlers(shutdown_requested, cleanup_complete)
+        args = parse_args(argv)
         run(
             args.config,
             open_browser=open_browser and not args.no_browser,
+            shutdown_requested=shutdown_requested,
+            cleanup_complete=cleanup_complete,
         )
     except (ConfigError, InstanceAlreadyRunning, StartupError, StorageError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
+    except TimeoutError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
     except OSError as error:
         print(f"ERROR: VFREG could not start: {error}", file=sys.stderr)
         return 2
+    finally:
+        uninstall_windows_console_shutdown_handler()
     return 0

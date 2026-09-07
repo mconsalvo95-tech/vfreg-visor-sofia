@@ -7,6 +7,16 @@ release.
 
 ## Unreleased
 
+- Windows console close/logoff/shutdown: register a bounded SetConsoleCtrlHandler
+  for CTRL_CLOSE/LOGOFF/SHUTDOWN that requests main-thread graceful shutdown
+  (Ctrl+C and CTRL+BREAK unchanged; Task Scheduler End remains abrupt). Main
+  loop observes the request during dashboard join; cleanup stages share one
+  monotonic budget (4.0s for native console close, 5.0s for Ctrl+C/SIGBREAK);
+  cleanup completion is signaled on every path; dashboard join timeout is
+  recorded as TimeoutError while still running server close, storage
+  drain/checkpoint, and final log. Windows Terminal WM_CLOSE may exit with
+  status 0xC000013A after successful bounded cleanup; verify data integrity via
+  the stopped log and WAL checkpoint (0 bytes), not exit code 0.
 - Fix Windows graceful shutdown: install a SIGBREAK handler and use an
   interruptible dashboard join so frozen portable exe CTRL+BREAK stops cleanly
   (home test 2026-09-06: exit 0 ~1.05s; final stopped JSON log; queue drained;

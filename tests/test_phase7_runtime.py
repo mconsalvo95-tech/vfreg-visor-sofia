@@ -572,8 +572,12 @@ class CliShutdownOrderingTests(unittest.TestCase):
                 events.append("collector.stop")
 
         class FakeServer:
+            def __init__(self) -> None:
+                self._stop = threading.Event()
+
             def shutdown(self) -> None:
                 events.append("server.shutdown")
+                self._stop.set()
 
             def server_close(self) -> None:
                 events.append("server.server_close")
@@ -589,12 +593,16 @@ class CliShutdownOrderingTests(unittest.TestCase):
             def error(self, *args: object, **kwargs: object) -> None:
                 events.append("logger.error")
 
-        serve_thread = threading.Thread(target=lambda: time.sleep(10), daemon=True)
+        fake_server = FakeServer()
+        serve_thread = threading.Thread(
+            target=lambda: fake_server._stop.wait(10),
+            daemon=True,
+        )
         serve_thread.start()
         try:
             _graceful_shutdown(
                 collector=FakeCollector(),
-                server=FakeServer(),  # type: ignore[arg-type]
+                server=fake_server,  # type: ignore[arg-type]
                 writer=FakeWriter(),  # type: ignore[arg-type]
                 logger=FakeLogger(),  # type: ignore[arg-type]
                 serve_thread=serve_thread,
@@ -662,6 +670,452 @@ class NoBrowserStartupTests(unittest.TestCase):
         self.assertFalse(run_mock.call_args.kwargs["open_browser"])
 
 
+class WindowsConsoleCloseShutdownTests(unittest.TestCase):
+    def test_handle_console_control_event_is_noop_for_unrelated_events(self) -> None:
+        from vfreg_visor.windows_console import handle_console_control_event
+
+        shutdown_requested = threading.Event()
+        cleanup_complete = threading.Event()
+        self.assertFalse(
+            handle_console_control_event(
+                0,
+                shutdown_requested=shutdown_requested,
+                cleanup_complete=cleanup_complete,
+                wait_timeout=0.01,
+            )
+        )
+        self.assertFalse(shutdown_requested.is_set())
+
+    def test_handle_console_control_event_sets_request_for_close_logoff_shutdown(
+        self,
+    ) -> None:
+        from vfreg_visor.windows_console import (
+            CTRL_CLOSE_EVENT,
+            CTRL_LOGOFF_EVENT,
+            CTRL_SHUTDOWN_EVENT,
+            handle_console_control_event,
+        )
+
+        for ctrl_type in (CTRL_CLOSE_EVENT, CTRL_LOGOFF_EVENT, CTRL_SHUTDOWN_EVENT):
+            with self.subTest(ctrl_type=ctrl_type):
+                shutdown_requested = threading.Event()
+                cleanup_complete = threading.Event()
+                cleanup_complete.set()
+                self.assertTrue(
+                    handle_console_control_event(
+                        ctrl_type,
+                        shutdown_requested=shutdown_requested,
+                        cleanup_complete=cleanup_complete,
+                        wait_timeout=0.05,
+                    )
+                )
+                self.assertTrue(shutdown_requested.is_set())
+
+    def test_handle_console_control_event_waits_for_cleanup_completion(self) -> None:
+        from vfreg_visor.windows_console import CTRL_CLOSE_EVENT, handle_console_control_event
+
+        shutdown_requested = threading.Event()
+        cleanup_complete = threading.Event()
+        started = time.monotonic()
+
+        def _complete_later() -> None:
+            time.sleep(0.05)
+            cleanup_complete.set()
+
+        threading.Thread(target=_complete_later, daemon=True).start()
+        self.assertTrue(
+            handle_console_control_event(
+                CTRL_CLOSE_EVENT,
+                shutdown_requested=shutdown_requested,
+                cleanup_complete=cleanup_complete,
+                wait_timeout=1.0,
+            )
+        )
+        elapsed = time.monotonic() - started
+        self.assertGreaterEqual(elapsed, 0.04)
+        self.assertLess(elapsed, 0.5)
+
+    def test_install_windows_console_shutdown_handler_is_noop_off_windows(
+        self,
+    ) -> None:
+        from vfreg_visor.windows_console import (
+            install_windows_console_shutdown_handler,
+            uninstall_windows_console_shutdown_handler,
+        )
+
+        with patch("vfreg_visor.windows_console.sys.platform", "linux"):
+            install_windows_console_shutdown_handler(
+                threading.Event(),
+                threading.Event(),
+            )
+            uninstall_windows_console_shutdown_handler()
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows-only console handler")
+    def test_install_and_uninstall_console_shutdown_handler(self) -> None:
+        from vfreg_visor.windows_console import (
+            install_windows_console_shutdown_handler,
+            uninstall_windows_console_shutdown_handler,
+        )
+
+        shutdown_requested = threading.Event()
+        cleanup_complete = threading.Event()
+        install_windows_console_shutdown_handler(shutdown_requested, cleanup_complete)
+        uninstall_windows_console_shutdown_handler()
+
+    def test_run_observes_console_shutdown_request_during_dashboard_join(
+        self,
+    ) -> None:
+        from vfreg_visor.cli import run
+
+        events: list[str] = []
+        shutdown_requested = threading.Event()
+        cleanup_complete = threading.Event()
+        real_join = threading.Thread.join
+
+        class FakeCollector:
+            def stop(self) -> None:
+                events.append("collector.stop")
+
+        class FakeWriter:
+            def close(self, timeout: float = 5) -> None:
+                events.append("writer.close")
+
+        class FakeServer:
+            def __init__(self) -> None:
+                self._stop = threading.Event()
+                self.cfg = {}
+                self.config_path = "config.json"
+                self.collector = None
+                self.writer = None
+
+            def serve_forever(self) -> None:
+                self._stop.wait(30)
+
+            def shutdown(self) -> None:
+                events.append("server.shutdown")
+                self._stop.set()
+
+            def server_close(self) -> None:
+                events.append("server.server_close")
+
+        class FakeLogger:
+            def info(self, *args: object, **kwargs: object) -> None:
+                events.append("logger.info")
+
+            def error(self, *args: object, **kwargs: object) -> None:
+                events.append("logger.error")
+
+        fake_server = FakeServer()
+
+        def tracking_join(self, timeout: float | None = None) -> None:
+            if timeout == 0.5 and not shutdown_requested.is_set():
+                shutdown_requested.set()
+            return real_join(self, timeout)
+
+        cfg = {
+            "dashboard": {"host": "127.0.0.1", "port": 8000},
+            "output_sqlite": "data/readings.sqlite",
+            "raw_journal": "data/raw.jsonl",
+            "storage": {"backup_directory": "data/backups"},
+            "network": {"mode": "udp_tcp", "udp_port": 5000, "tcp_port": 5000},
+        }
+
+        with (
+            patch("vfreg_visor.cli.load_config", return_value=cfg),
+            patch("vfreg_visor.cli.ensure_runtime_paths_writable"),
+            patch("vfreg_visor.cli.configure_operational_logging", return_value=FakeLogger()),
+            patch("vfreg_visor.cli.DeploymentInstanceLock"),
+            patch("vfreg_visor.cli._create_dashboard_server", return_value=fake_server),
+            patch("vfreg_visor.cli.StorageWriter", return_value=FakeWriter()),
+            patch("vfreg_visor.cli.start_network_servers", return_value=FakeCollector()),
+            patch.object(threading.Thread, "join", tracking_join),
+        ):
+            run(
+                "config.factory.json",
+                open_browser=False,
+                shutdown_requested=shutdown_requested,
+                cleanup_complete=cleanup_complete,
+            )
+
+        self.assertTrue(cleanup_complete.is_set())
+        self.assertLess(events.index("server.shutdown"), events.index("writer.close"))
+        self.assertEqual(events[-1], "logger.info")
+
+    def test_graceful_shutdown_records_dashboard_timeout_and_still_closes_storage(
+        self,
+    ) -> None:
+        from vfreg_visor.cli import _graceful_shutdown
+
+        events: list[str] = []
+
+        class FakeServer:
+            def shutdown(self) -> None:
+                events.append("server.shutdown")
+
+            def server_close(self) -> None:
+                events.append("server.server_close")
+
+        class FakeWriter:
+            def close(self, timeout: float = 5) -> None:
+                events.append("writer.close")
+
+        class FakeLogger:
+            def info(self, *args: object, **kwargs: object) -> None:
+                events.append("logger.info")
+
+            def error(self, *args: object, **kwargs: object) -> None:
+                events.append("logger.error")
+
+        serve_thread = threading.Thread(target=lambda: time.sleep(10), daemon=True)
+        serve_thread.start()
+        cleanup_complete = threading.Event()
+        with self.assertRaises(TimeoutError):
+            _graceful_shutdown(
+                collector=None,
+                server=FakeServer(),  # type: ignore[arg-type]
+                writer=FakeWriter(),  # type: ignore[arg-type]
+                logger=FakeLogger(),  # type: ignore[arg-type]
+                serve_thread=serve_thread,
+                cleanup_budget_seconds=0.05,
+                cleanup_complete=cleanup_complete,
+            )
+        self.assertTrue(cleanup_complete.is_set())
+        self.assertIn("server.server_close", events)
+        self.assertIn("writer.close", events)
+        self.assertIn("logger.info", events)
+        self.assertLess(events.index("server.server_close"), events.index("writer.close"))
+
+    def test_main_returns_nonzero_on_shutdown_timeout(self) -> None:
+        from vfreg_visor.cli import main
+
+        with (
+            patch("vfreg_visor.cli._install_windows_shutdown_handlers"),
+            patch("vfreg_visor.cli.uninstall_windows_console_shutdown_handler"),
+            patch(
+                "vfreg_visor.cli.run",
+                side_effect=TimeoutError(
+                    "Dashboard thread did not stop within 5.0s cleanup budget during shutdown"
+                ),
+            ),
+        ):
+            exit_code = main(["--config", "config.factory.json", "--no-browser"])
+        self.assertEqual(exit_code, 1)
+
+    def test_graceful_shutdown_passes_remaining_time_to_later_stages(self) -> None:
+        from vfreg_visor.cli import _graceful_shutdown
+
+        join_timeouts: list[float] = []
+        writer_timeouts: list[float] = []
+        real_join = threading.Thread.join
+
+        class FakeServer:
+            def shutdown(self) -> None:
+                pass
+
+            def server_close(self) -> None:
+                pass
+
+        class FakeWriter:
+            def close(self, timeout: float = 5) -> None:
+                writer_timeouts.append(timeout)
+
+        class FakeLogger:
+            def info(self, *args: object, **kwargs: object) -> None:
+                pass
+
+            def error(self, *args: object, **kwargs: object) -> None:
+                pass
+
+        serve_thread = threading.Thread(target=lambda: time.sleep(0.12), daemon=True)
+        serve_thread.start()
+
+        def tracking_join(self, timeout: float | None = None) -> None:
+            if timeout is not None and timeout <= 0.25:
+                join_timeouts.append(timeout)
+            return real_join(self, timeout)
+
+        with patch.object(threading.Thread, "join", tracking_join):
+            _graceful_shutdown(
+                collector=None,
+                server=FakeServer(),  # type: ignore[arg-type]
+                writer=FakeWriter(),  # type: ignore[arg-type]
+                logger=FakeLogger(),  # type: ignore[arg-type]
+                serve_thread=serve_thread,
+                cleanup_budget_seconds=0.2,
+            )
+
+        self.assertEqual(len(join_timeouts), 1)
+        self.assertEqual(len(writer_timeouts), 1)
+        self.assertLess(writer_timeouts[0], join_timeouts[0])
+        self.assertGreaterEqual(writer_timeouts[0], 0.0)
+
+    def test_run_uses_native_console_cleanup_budget_when_shutdown_requested(
+        self,
+    ) -> None:
+        from vfreg_visor.cli import (
+            _NATIVE_CONSOLE_CLEANUP_BUDGET_SECONDS,
+            _SHUTDOWN_CLEANUP_TIMEOUT_SECONDS,
+            run,
+        )
+
+        cleanup_budgets: list[float] = []
+        shutdown_requested = threading.Event()
+        cleanup_complete = threading.Event()
+        real_join = threading.Thread.join
+
+        class FakeCollector:
+            def stop(self) -> None:
+                pass
+
+        class FakeWriter:
+            def close(self, timeout: float = 5) -> None:
+                pass
+
+        class FakeServer:
+            def __init__(self) -> None:
+                self._stop = threading.Event()
+                self.cfg = {}
+                self.config_path = "config.json"
+                self.collector = None
+                self.writer = None
+
+            def serve_forever(self) -> None:
+                self._stop.wait(30)
+
+            def shutdown(self) -> None:
+                self._stop.set()
+
+            def server_close(self) -> None:
+                pass
+
+        class FakeLogger:
+            def info(self, *args: object, **kwargs: object) -> None:
+                pass
+
+            def error(self, *args: object, **kwargs: object) -> None:
+                pass
+
+        fake_server = FakeServer()
+
+        def tracking_join(self, timeout: float | None = None) -> None:
+            if timeout == 0.5 and not shutdown_requested.is_set():
+                shutdown_requested.set()
+            return real_join(self, timeout)
+
+        def capture_shutdown(**kwargs: object) -> None:
+            cleanup_budgets.append(float(kwargs["cleanup_budget_seconds"]))
+
+        cfg = {
+            "dashboard": {"host": "127.0.0.1", "port": 8000},
+            "output_sqlite": "data/readings.sqlite",
+            "raw_journal": "data/raw.jsonl",
+            "storage": {"backup_directory": "data/backups"},
+            "network": {"mode": "udp_tcp", "udp_port": 5000, "tcp_port": 5000},
+        }
+
+        with (
+            patch("vfreg_visor.cli.load_config", return_value=cfg),
+            patch("vfreg_visor.cli.ensure_runtime_paths_writable"),
+            patch("vfreg_visor.cli.configure_operational_logging", return_value=FakeLogger()),
+            patch("vfreg_visor.cli.DeploymentInstanceLock"),
+            patch("vfreg_visor.cli._create_dashboard_server", return_value=fake_server),
+            patch("vfreg_visor.cli.StorageWriter", return_value=FakeWriter()),
+            patch("vfreg_visor.cli.start_network_servers", return_value=FakeCollector()),
+            patch.object(threading.Thread, "join", tracking_join),
+            patch("vfreg_visor.cli._graceful_shutdown", side_effect=capture_shutdown),
+        ):
+            run(
+                "config.factory.json",
+                open_browser=False,
+                shutdown_requested=shutdown_requested,
+                cleanup_complete=cleanup_complete,
+            )
+
+        self.assertEqual(cleanup_budgets, [_NATIVE_CONSOLE_CLEANUP_BUDGET_SECONDS])
+        self.assertLess(
+            _NATIVE_CONSOLE_CLEANUP_BUDGET_SECONDS,
+            _SHUTDOWN_CLEANUP_TIMEOUT_SECONDS,
+        )
+
+    def test_handle_console_control_event_returns_before_slow_cleanup_finishes(
+        self,
+    ) -> None:
+        from vfreg_visor.windows_console import CTRL_CLOSE_EVENT, handle_console_control_event
+
+        shutdown_requested = threading.Event()
+        cleanup_complete = threading.Event()
+        handler_wait = 0.12
+
+        def _complete_later() -> None:
+            time.sleep(handler_wait + 0.5)
+            cleanup_complete.set()
+
+        threading.Thread(target=_complete_later, daemon=True).start()
+        started = time.monotonic()
+        self.assertTrue(
+            handle_console_control_event(
+                CTRL_CLOSE_EVENT,
+                shutdown_requested=shutdown_requested,
+                cleanup_complete=cleanup_complete,
+                wait_timeout=handler_wait,
+            )
+        )
+        elapsed = time.monotonic() - started
+        self.assertTrue(shutdown_requested.is_set())
+        self.assertGreaterEqual(elapsed, handler_wait * 0.8)
+        self.assertLess(elapsed, handler_wait + 0.15)
+        cleanup_complete.wait(timeout=1.0)
+        self.assertTrue(cleanup_complete.is_set())
+
+    def test_graceful_shutdown_runs_every_stage_and_sets_cleanup_complete(self) -> None:
+        from vfreg_visor.cli import _graceful_shutdown
+
+        events: list[str] = []
+
+        class FakeCollector:
+            def stop(self) -> None:
+                events.append("collector.stop")
+
+        class FakeServer:
+            def shutdown(self) -> None:
+                events.append("server.shutdown")
+
+            def server_close(self) -> None:
+                events.append("server.server_close")
+
+        class FakeWriter:
+            def close(self, timeout: float = 5) -> None:
+                events.append("writer.close")
+
+        class FakeLogger:
+            def info(self, *args: object, **kwargs: object) -> None:
+                events.append("logger.info")
+
+            def error(self, *args: object, **kwargs: object) -> None:
+                events.append("logger.error")
+
+        serve_thread = threading.Thread(target=lambda: time.sleep(10), daemon=True)
+        serve_thread.start()
+        cleanup_complete = threading.Event()
+        with self.assertRaises(TimeoutError):
+            _graceful_shutdown(
+                collector=FakeCollector(),
+                server=FakeServer(),  # type: ignore[arg-type]
+                writer=FakeWriter(),  # type: ignore[arg-type]
+                logger=FakeLogger(),  # type: ignore[arg-type]
+                serve_thread=serve_thread,
+                cleanup_budget_seconds=0.05,
+                cleanup_complete=cleanup_complete,
+            )
+        self.assertTrue(cleanup_complete.is_set())
+        self.assertEqual(events[0], "collector.stop")
+        self.assertIn("server.shutdown", events)
+        self.assertIn("server.server_close", events)
+        self.assertIn("writer.close", events)
+        self.assertEqual(events[-1], "logger.info")
+        self.assertLess(events.index("server.server_close"), events.index("writer.close"))
+
+
 class WindowsConsoleInterruptTests(unittest.TestCase):
     def test_install_windows_console_interrupt_handlers_is_noop_off_windows(
         self,
@@ -694,21 +1148,25 @@ class WindowsConsoleInterruptTests(unittest.TestCase):
 
         call_order: list[str] = []
 
-        def _install() -> None:
+        def _install(*args: object, **kwargs: object) -> None:
             call_order.append("install")
 
         def _run(*args: object, **kwargs: object) -> None:
             call_order.append("run")
 
+        def _uninstall() -> None:
+            call_order.append("uninstall")
+
         with (
             patch(
-                "vfreg_visor.cli._install_windows_console_interrupt_handlers",
+                "vfreg_visor.cli._install_windows_shutdown_handlers",
                 side_effect=_install,
             ),
+            patch("vfreg_visor.cli.uninstall_windows_console_shutdown_handler", side_effect=_uninstall),
             patch("vfreg_visor.cli.run", side_effect=_run),
         ):
             main(["--config", "config.factory.json", "--no-browser"])
-        self.assertEqual(call_order, ["install", "run"])
+        self.assertEqual(call_order, ["install", "run", "uninstall"])
 
     def test_run_keyboard_interrupt_uses_interruptible_join_and_graceful_shutdown(
         self,
@@ -781,7 +1239,10 @@ class WindowsConsoleInterruptTests(unittest.TestCase):
             run("config.factory.json", open_browser=False)
 
         self.assertEqual(join_timeouts[0], 0.5)
-        self.assertIn(5.0, join_timeouts)
+        shutdown_join_timeouts = [t for t in join_timeouts if t not in (None, 0.5)]
+        self.assertEqual(len(shutdown_join_timeouts), 1)
+        self.assertGreater(shutdown_join_timeouts[0], 4.9)
+        self.assertLessEqual(shutdown_join_timeouts[0], 5.0)
         self.assertLess(events.index("server.shutdown"), events.index("writer.close"))
         self.assertEqual(events[-1], "logger.info")
 

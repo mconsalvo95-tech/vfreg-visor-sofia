@@ -95,6 +95,16 @@ Detener (metodo normal):
 3. No usar "Finalizar tarea" del Administrador de tareas salvo indicacion de
    soporte.
 
+Cerrar la ventana con la X, cierre de sesion o apagado de Windows:
+- El colector intenta un cierre ordenado con tiempo limitado (mejor esfuerzo).
+- Ctrl+C sigue siendo el metodo preferido del operador porque permite mas
+  margen para vaciar la cola y registrar el cierre.
+- En Windows Terminal, cerrar con la X puede mostrar codigo de salida
+  0xC000013A aunque el cierre ordenado haya completado; comprobar integridad
+  con el log "VFREG Visor stopped" y checkpoint de SQLite completado, no solo
+  el codigo de salida.
+- Si la X no cierra en unos segundos, usar Ctrl+C o contactar soporte.
+
 Detener desde el Programador de tareas (End/Detener):
 - Es un corte abrupto; no garantiza cierre ordenado ni vaciado de la cola.
 - Usar solo cuando soporte lo indique; el metodo normal del operador es Ctrl+C

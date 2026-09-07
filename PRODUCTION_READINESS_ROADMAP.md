@@ -363,6 +363,12 @@ Goal: Operate unattended on the factory PC.
 - [x] Add graceful shutdown and confirm queued records are flushed (home test
   2026-09-06: frozen portable exe CTRL+BREAK stop exit 0 ~1.05s; final stopped
   JSON log; queue drained; SQLite rows 646→652; WAL 0; listening ports free).
+- [ ] Handle Windows console X/logoff/shutdown as best-effort bounded graceful
+  shutdown (implementation complete: SetConsoleCtrlHandler + main-thread shared
+  cleanup budget; home evidence 2026-09-07 Windows Terminal WM_CLOSE — stopped
+  log + WAL=0 but process exit 0xC000013A; Ctrl+C preferred; Task Scheduler End
+  remains abrupt; factory/classic-host/reboot-with-running-collector operational
+  verification pending).
 - [x] Add health information for the collector, storage writer, and last valid
   reading.
 - [x] Add structured operational logs with timestamps and severity.
