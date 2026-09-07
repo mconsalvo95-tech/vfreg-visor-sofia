@@ -1,6 +1,6 @@
 # VFREG Visor — Production Readiness Roadmap
 
-Last updated: 2026-08-25
+Last updated: 2026-09-06
 
 Current status: Phase 6B functional foundation complete; approved brand assets
 and stakeholder review are pending
@@ -349,10 +349,17 @@ It must not change the confirmed device protocol or safety constraints.
 
 Goal: Operate unattended on the factory PC.
 
-- [ ] Verify automatic reconnection after the Ethernet cable is disconnected.
-- [ ] Verify automatic reconnection after the NT1-B is rebooted.
-- [ ] Verify recovery after Windows sleep or network-adapter reset.
-- [x] Add graceful shutdown and confirm queued records are flushed.
+- [ ] Verify automatic reconnection after the Ethernet cable is disconnected
+  (home test 2026-09-06 UDP/VFREG-SIM only: collector-first dashboard moved
+  DISCONNECTED/WAITING to CONNECTED when the simulator started; does not
+  validate real Ethernet cable disconnect).
+- [ ] Verify automatic reconnection after the NT1-B is rebooted (factory
+  hardware validation pending).
+- [ ] Verify recovery after Windows sleep or network-adapter reset (factory
+  PC validation pending).
+- [x] Add graceful shutdown and confirm queued records are flushed (home test
+  2026-09-06: frozen portable exe CTRL+BREAK stop exit 0 ~1.05s; final stopped
+  JSON log; queue drained; SQLite rows 646→652; WAL 0; listening ports free).
 - [x] Add health information for the collector, storage writer, and last valid
   reading.
 - [x] Add structured operational logs with timestamps and severity.
@@ -373,7 +380,9 @@ Goal: Operate unattended on the factory PC.
   (documented in operator runbook; locked-session operation not yet verified on
   factory PC).
 - [ ] Keep reconnecting safely when the task starts before the VFREG/NT1-B is
-  powered or reachable.
+  powered or reachable (home test 2026-09-06 UDP/VFREG-SIM only: collector
+  started first and connected once the simulator came up; factory NT1-B timing
+  not yet verified).
 - [ ] Avoid opening duplicate dashboard or collector processes (IgnoreNew and
   single-instance lock configured locally; duplicate scheduled-task runtime not
   yet verified on factory PC).
@@ -383,7 +392,11 @@ Goal: Operate unattended on the factory PC.
   collector; second trigger preserved same PID under IgnoreNew; health/readings
   stayed connected; cleanup removed task/processes; factory PC duplicate-run
   behavior not yet verified).
-- [x] Provide a safe manual stop/restart procedure.
+- [x] Provide a safe manual stop/restart procedure (home test 2026-09-06:
+  simulator stop/restart kept the same collector PID and listeners; dashboard
+  cycled DISCONNECTED then CONNECTED; HOME-TEST Task Scheduler stop/start
+  passed though task **End** is abrupt rather than graceful; all tasks and
+  processes cleaned up afterward).
 
 ### Acceptance criteria
 

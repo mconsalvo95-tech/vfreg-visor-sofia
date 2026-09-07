@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import errno
 import logging
+import signal
 import sys
 import threading
 import webbrowser
@@ -27,6 +28,18 @@ from .storage import StorageError, StorageWriter
 
 class StartupError(RuntimeError):
     pass
+
+
+_DASHBOARD_JOIN_TIMEOUT_SECONDS = 0.5
+
+
+def _install_windows_console_interrupt_handlers() -> None:
+    """Make CTRL+BREAK raise KeyboardInterrupt like Ctrl+C on Windows."""
+    if sys.platform != "win32" or not hasattr(signal, "SIGBREAK"):
+        return
+    if threading.current_thread() is not threading.main_thread():
+        raise RuntimeError("Windows signal handlers must be installed from the main thread")
+    signal.signal(signal.SIGBREAK, signal.default_int_handler)
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -223,7 +236,8 @@ def run(
             )
             serve_thread.start()
             try:
-                serve_thread.join()
+                while serve_thread.is_alive():
+                    serve_thread.join(timeout=_DASHBOARD_JOIN_TIMEOUT_SECONDS)
             except KeyboardInterrupt:
                 print("\nStopping VFREG dashboard.")
         finally:
@@ -252,6 +266,7 @@ def main(
     *,
     open_browser: bool = False,
 ) -> int:
+    _install_windows_console_interrupt_handlers()
     args = parse_args(argv)
     try:
         run(

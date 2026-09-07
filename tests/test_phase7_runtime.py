@@ -4,8 +4,10 @@ import json
 import logging
 import os
 import re
+import signal
 import socket
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -658,6 +660,130 @@ class NoBrowserStartupTests(unittest.TestCase):
             main(["--config", "config.factory.json", "--no-browser"], open_browser=True)
         run_mock.assert_called_once()
         self.assertFalse(run_mock.call_args.kwargs["open_browser"])
+
+
+class WindowsConsoleInterruptTests(unittest.TestCase):
+    def test_install_windows_console_interrupt_handlers_is_noop_off_windows(
+        self,
+    ) -> None:
+        from vfreg_visor.cli import _install_windows_console_interrupt_handlers
+
+        with patch("vfreg_visor.cli.sys.platform", "linux"):
+            _install_windows_console_interrupt_handlers()
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows-only signal semantics")
+    def test_install_windows_console_interrupt_handlers_sets_sigbreak(self) -> None:
+        from vfreg_visor.cli import _install_windows_console_interrupt_handlers
+
+        previous = signal.getsignal(signal.SIGBREAK)
+        try:
+            _install_windows_console_interrupt_handlers()
+            self.assertIs(
+                signal.getsignal(signal.SIGBREAK),
+                signal.default_int_handler,
+            )
+            self.assertIs(
+                signal.getsignal(signal.SIGINT),
+                signal.default_int_handler,
+            )
+        finally:
+            signal.signal(signal.SIGBREAK, previous)
+
+    def test_main_installs_windows_handlers_before_run(self) -> None:
+        from vfreg_visor.cli import main
+
+        call_order: list[str] = []
+
+        def _install() -> None:
+            call_order.append("install")
+
+        def _run(*args: object, **kwargs: object) -> None:
+            call_order.append("run")
+
+        with (
+            patch(
+                "vfreg_visor.cli._install_windows_console_interrupt_handlers",
+                side_effect=_install,
+            ),
+            patch("vfreg_visor.cli.run", side_effect=_run),
+        ):
+            main(["--config", "config.factory.json", "--no-browser"])
+        self.assertEqual(call_order, ["install", "run"])
+
+    def test_run_keyboard_interrupt_uses_interruptible_join_and_graceful_shutdown(
+        self,
+    ) -> None:
+        from vfreg_visor.cli import run
+
+        events: list[str] = []
+        join_timeouts: list[float | None] = []
+
+        class FakeCollector:
+            def stop(self) -> None:
+                events.append("collector.stop")
+
+        class FakeWriter:
+            def close(self, timeout: float = 5) -> None:
+                events.append("writer.close")
+
+        class FakeServer:
+            def __init__(self) -> None:
+                self._stop = threading.Event()
+                self.cfg = {}
+                self.config_path = "config.json"
+                self.collector = None
+                self.writer = None
+
+            def serve_forever(self) -> None:
+                self._stop.wait(30)
+
+            def shutdown(self) -> None:
+                events.append("server.shutdown")
+                self._stop.set()
+
+            def server_close(self) -> None:
+                events.append("server.server_close")
+
+        class FakeLogger:
+            def info(self, *args: object, **kwargs: object) -> None:
+                events.append("logger.info")
+
+            def error(self, *args: object, **kwargs: object) -> None:
+                events.append("logger.error")
+
+        fake_server = FakeServer()
+        real_join = threading.Thread.join
+
+        def tracking_join(self, timeout: float | None = None) -> None:
+            join_timeouts.append(timeout)
+            if timeout == 0.5:
+                raise KeyboardInterrupt
+            return real_join(self, timeout)
+
+        cfg = {
+            "dashboard": {"host": "127.0.0.1", "port": 8000},
+            "output_sqlite": "data/readings.sqlite",
+            "raw_journal": "data/raw.jsonl",
+            "storage": {"backup_directory": "data/backups"},
+            "network": {"mode": "udp_tcp", "udp_port": 5000, "tcp_port": 5000},
+        }
+
+        with (
+            patch("vfreg_visor.cli.load_config", return_value=cfg),
+            patch("vfreg_visor.cli.ensure_runtime_paths_writable"),
+            patch("vfreg_visor.cli.configure_operational_logging", return_value=FakeLogger()),
+            patch("vfreg_visor.cli.DeploymentInstanceLock"),
+            patch("vfreg_visor.cli._create_dashboard_server", return_value=fake_server),
+            patch("vfreg_visor.cli.StorageWriter", return_value=FakeWriter()),
+            patch("vfreg_visor.cli.start_network_servers", return_value=FakeCollector()),
+            patch.object(threading.Thread, "join", tracking_join),
+        ):
+            run("config.factory.json", open_browser=False)
+
+        self.assertEqual(join_timeouts[0], 0.5)
+        self.assertIn(5.0, join_timeouts)
+        self.assertLess(events.index("server.shutdown"), events.index("writer.close"))
+        self.assertEqual(events[-1], "logger.info")
 
 
 if __name__ == "__main__":

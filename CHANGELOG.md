@@ -7,6 +7,19 @@ release.
 
 ## Unreleased
 
+- Fix Windows graceful shutdown: install a SIGBREAK handler and use an
+  interruptible dashboard join so frozen portable exe CTRL+BREAK stops cleanly
+  (home test 2026-09-06: exit 0 ~1.05s; final stopped JSON log; queue drained;
+  SQLite rows 646→652; WAL 0; ports free).
+- Home validation 2026-09-06 (UDP/VFREG-SIM, not real Modbus/Ethernet):
+  collector-first dashboard moved DISCONNECTED/WAITING to CONNECTED when the
+  simulator started; simulator stop/restart preserved collector PID/listeners
+  and cycled DISCONNECTED then CONNECTED; HOME-TEST Task Scheduler stop/start
+  passed (task End abrupt, not graceful); all tasks/processes cleaned up.
+- Factory gates still open: real Ethernet/NT1-B reconnect, daily 05:50 trigger,
+  sleep/wake, reboot/logon, locked-session, and operator UI validation on the
+  production PC.
+
 ## 0.4.0.dev1 — 2026-09-06
 
 - Production-readiness work begins from the successful company-PC pilot.
