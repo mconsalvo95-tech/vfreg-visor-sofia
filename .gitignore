@@ -36,6 +36,9 @@ portable-dist/
 *.zip
 *.zip.sha256
 
+# Session scratch (not product documentation)
+/plan.md
+
 # Local editor and operating-system files
 .idea/
 .vscode/

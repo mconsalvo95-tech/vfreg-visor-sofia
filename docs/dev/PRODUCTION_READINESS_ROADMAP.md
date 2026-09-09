@@ -70,13 +70,15 @@ VFREG-VISOR/
 ├── dashboard/               # Browser UI
 ├── tests/                   # Automated tests
 ├── scripts/                 # Build, diagnostic, and deployment tools
-├── docs/                    # Operator and support documentation
+├── docs/                    # Developer and support documentation
+│   ├── dev/                 # Roadmap, handoff, notebook setup
+│   └── mockups/             # Approved UI mockup (not in the factory ZIP)
+├── portable/                # Operator files copied into the factory ZIP
 ├── config.example.json      # Safe configuration template
 ├── pyproject.toml
 ├── uv.lock
 ├── README.md
-├── CHANGELOG.md
-└── PRODUCTION_READINESS_ROADMAP.md
+└── CHANGELOG.md
 ```
 
 ### Acceptance criteria

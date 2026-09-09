@@ -1,5 +1,8 @@
 # Phase 6A interactive dashboard mockup
 
+Developer design archive for Phase 6E comparison. It is not copied into the
+factory ZIP and is not operator documentation.
+
 This local-only prototype validates the proposed operator experience before any
 production dashboard code changes are made.
 

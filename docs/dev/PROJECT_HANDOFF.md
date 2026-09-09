@@ -133,7 +133,7 @@ Wireshark on the factory computer.
 
 ## Next work
 
-Follow `PRODUCTION_READINESS_ROADMAP.md`. Finish the remaining Phase 6D report
+Follow `docs/dev/PRODUCTION_READINESS_ROADMAP.md`. Finish the remaining Phase 6D report
 metrics and large-XLSX row-limit handling, then continue to Phase 6E validation.
 Keep the logo placeholder until approved brand assets are supplied, and keep
 the production Modbus path strictly read-only while that work proceeds.
