@@ -25,7 +25,7 @@ if errorlevel 1 goto :preflight_failed
 echo.
 echo Development setup is complete.
 echo The Ethernet adapter must use 192.168.1.1 / 255.255.255.0 with no gateway.
-echo See NEW_NOTEBOOK_SETUP.md before connecting to the VFREG.
+echo See docs\dev\NEW_NOTEBOOK_SETUP.md before connecting to the VFREG.
 pause
 exit /b 0
 

@@ -103,9 +103,10 @@ Run `run_factory_preflight.bat`, then start the real collector with
 separate from simulator data under `data/factory/`.
 
 For a second development notebook, clone this project, create the local factory
-configuration, and run `setup_new_notebook.bat`. `NEW_NOTEBOOK_SETUP.md`
+configuration, and run `setup_new_notebook.bat`. `docs/dev/NEW_NOTEBOOK_SETUP.md`
 contains the complete procedure. For a factory operator computer, transfer the
-tested portable ZIP instead of the source tree.
+tested portable ZIP instead of the source tree. Developer notes (roadmap,
+handoff) live under `docs/dev/`. Operator instructions ship only in `portable/`.
 
 ## Start the collector notebook
 

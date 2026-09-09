@@ -7,6 +7,12 @@ release.
 
 ## Unreleased
 
+- Move developer-only notes into `docs/dev/` (roadmap, handoff, notebook setup)
+  and drop session `plan.md` from the repository. Operator files remain in
+  `portable/` and are the only docs copied into the factory ZIP. The Phase 6A
+  mockup stays under `docs/mockups/` for later UI comparison; it is not operator
+  documentation.
+
 - Windows console close/logoff/shutdown: register a bounded SetConsoleCtrlHandler
   for CTRL_CLOSE/LOGOFF/SHUTDOWN that requests main-thread graceful shutdown
   (Ctrl+C and CTRL+BREAK unchanged; Task Scheduler End remains abrupt). Main
