@@ -1,3 +1,64 @@
+# Phase 7 H5 — home sleep/wake with scheduled daily start
+
+Status: PASS 2026-09-09. Auto-wake at 02:13 attributed to HOME-TEST; collector
+started on schedule; CONNECTED; SQLite 1586→2371. Post-test AC RTCWAKE restored
+to 2 (important-only) via helper `-Restore`. Factory 05:50 remains pending.
+
+## Decision
+
+IT approved including the daily collector start with the application. On the
+factory PC that means task `VFREG-VISOR-SOFIA` at **05:50** via
+`Install-VFREGScheduledTask.ps1`.
+
+This home rehearsal uses the **same installer and WakeToRun path**, with a
+near-future `DailyStartTime`, because waiting until 05:50 tonight is not a
+useful test. Do **not** register the production task name, do **not** leave
+05:50 on this home PC, and do **not** change `Start VFREG Visor.bat` in this
+pass (that would wake the home PC every morning). Factory Start-BAT auto-register
+is a later, explicit change.
+
+For the H5 rehearsal AC RTC wake timers were temporarily Enabled (`RTCWAKE AC=1`,
+DC unchanged). After the pass they were restored to important-only (`AC=2`) so
+this home PC does not wake for other timers.
+
+## Safety
+
+- Isolated deploy only: `C:\VFREG-HOME-TEST`
+- Task name only: `VFREG-VISOR-SOFIA-HOME-TEST`
+- Config only: `C:\VFREG-HOME-TEST\config.json` (VFREG-SIM, UDP 127.0.0.1:5000)
+- Never `VFREG-VISOR-SOFIA`, never `config.factory.json`, never `192.168.1.7`
+- Do not edit tracked repo files, commit, push, sleep, or reboot from the agent
+- Stale `.vfreg-collector.lock` PID 360 is dead; remove only if the PID is gone
+- After the test: remove the HOME-TEST task and stop test processes
+
+## Sequence
+
+1. **Preflight.** Confirm AC power, `RTCWAKE AC=1`, ports 8000/5000 free, no
+   VFREG tasks, HOME-TEST exe present, installer `-ValidateOnly` shows
+   `--no-browser`, `config.json`, `WakeToRun`, `IgnoreNew`.
+2. **Prepare.** Start exactly one repo Python 3.13 simulator aimed at the
+   HOME-TEST config. Do **not** start the collector. Register HOME-TEST with
+   `-DailyStartTime` = now + ~10 minutes (`HH:mm`). Record SQLite row count,
+   task XML, and evidence under
+   `C:\VFREG-HOME-TEST\data\phase7-home\sleep-wake-2026-09-09\`.
+3. **Sleep (operator).** Put Windows to **Sleep** (not Hibernate, not Shut down)
+   before the trigger. Do not start the collector manually. Screen may stay off
+   after wake; that is expected.
+4. **Verify after wake.** Task `LastRunTime` ≈ trigger; one collector PID from
+   the HOME-TEST exe; `/api/status` healthy; SQLite rows increased; simulator
+   still the same PID if it survived sleep, otherwise restart simulator and
+   confirm reconnect. Cleanup: `-Remove` HOME-TEST only.
+
+## Pass / fail
+
+- **Pass:** PC auto-wakes at the trigger (or within ~1 min), collector starts
+  without a manual launch, readings continue, one instance only.
+- **Fail:** no auto-wake (repeat of RTCWAKE=2). Manual wake + StartWhenAvailable
+  is recovery, not a WakeToRun pass.
+- Factory 05:50, locked-session, and NT1-B remain pending.
+
+---
+
 # Phase 6D revised plan: editable management charts
 
 Status: implemented and covered by automated regression checks. Excel 2019 Plus,

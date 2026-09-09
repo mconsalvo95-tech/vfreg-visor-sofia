@@ -35,6 +35,55 @@ else:
     STATIC_ROOT = Path(__file__).resolve().parents[2] / "dashboard"
 
 
+def build_health_payload(
+    cfg: dict,
+    latest: dict | None,
+    network_snapshot: dict,
+    storage_snapshot: dict,
+    current_connection_state: str,
+) -> dict:
+    """Stable runtime health summary for /api/status."""
+    last_timestamp: str | None = None
+    age_seconds: float | None = None
+    valid_reading = False
+    if latest:
+        last_timestamp = str(latest.get("timestamp") or "") or None
+        try:
+            timestamp = datetime.fromisoformat(last_timestamp)
+            age_seconds = max(
+                0.0, (datetime.now().astimezone() - timestamp).total_seconds()
+            )
+            timeout = float(cfg["network"].get("connection_timeout_seconds", 3))
+            valid_reading = (
+                latest.get("status") == "OK"
+                and latest.get("quality_flag")
+                not in {"INVALID", "INCOMPLETE", "OUT_OF_RANGE"}
+                and age_seconds <= timeout
+            )
+        except (TypeError, ValueError):
+            age_seconds = None
+    return {
+        "collector": {
+            "state": current_connection_state,
+            "mode": cfg["network"].get("mode", "listener"),
+            "tcp_listener": network_snapshot.get("tcp_listener"),
+            "threads_alive": bool(network_snapshot.get("threads_alive")),
+            "last_error": str(network_snapshot.get("last_error") or ""),
+        },
+        "storage": {
+            "writer_alive": bool(storage_snapshot.get("writer_alive")),
+            "health": str(storage_snapshot.get("storage_health") or "UNKNOWN"),
+            "queue_depth": int(storage_snapshot.get("queue_depth") or 0),
+            "last_error": str(storage_snapshot.get("last_error") or ""),
+        },
+        "readings": {
+            "last_timestamp": last_timestamp,
+            "age_seconds": age_seconds,
+            "valid_reading": valid_reading,
+        },
+    }
+
+
 def connection_state(latest: dict | None, timeout_seconds: float) -> str:
     if not latest:
         return "WAITING"
@@ -194,6 +243,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 latest,
                 float(cfg["network"]["connection_timeout_seconds"]),
             )
+        storage_snapshot = self.app_server.writer.snapshot()
         return {
             "app_version": __version__,
             "site_name": cfg["site_name"],
@@ -203,9 +253,16 @@ class DashboardHandler(BaseHTTPRequestHandler):
             "readings": readings,
             "summary": fetch_summary(cfg["output_sqlite"]),
             "events": fetch_events(cfg["output_sqlite"], 12),
+            "health": build_health_payload(
+                cfg,
+                latest,
+                network_snapshot,
+                storage_snapshot,
+                current_connection_state,
+            ),
             "diagnostics": {
                 "network": network_snapshot,
-                "storage": self.app_server.writer.snapshot(),
+                "storage": storage_snapshot,
             },
             "network": {
                 "mode": cfg["network"].get("mode", "listener"),

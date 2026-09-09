@@ -447,6 +447,7 @@ class StorageWriter:
             )
         ensure_parent(raw_journal_path)
         Path(self.backup_directory).mkdir(parents=True, exist_ok=True)
+        self._closed = False
         self._thread = threading.Thread(
             target=self._run,
             daemon=True,
@@ -512,14 +513,30 @@ class StorageWriter:
         return result
 
     def close(self, timeout: float = 5) -> None:
+        if self._closed:
+            return
         self._stop.set()
+        deadline = time.monotonic() + timeout
         try:
-            self._queue.put(("stop", None), timeout=timeout)
-        except queue.Full:
-            self._record_error(StorageError("Storage queue remained full during shutdown"))
-        self._thread.join(timeout=timeout)
+            remaining = max(0.0, deadline - time.monotonic())
+            self._queue.put(("stop", None), timeout=remaining or 0.001)
+        except queue.Full as error:
+            raise StorageError("Storage queue remained full during shutdown") from error
+        remaining = max(0.0, deadline - time.monotonic())
+        self._thread.join(timeout=remaining)
         if self._thread.is_alive():
-            self._record_error(StorageError("Storage writer did not stop within the timeout"))
+            raise StorageError("Storage writer did not stop within the timeout")
+        pending = self._queue.qsize()
+        if pending:
+            raise StorageError(
+                f"Storage queue still has {pending} pending records after shutdown"
+            )
+        try:
+            with closing(connect_sqlite(self.sqlite_path)) as con:
+                con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except sqlite3.Error as error:
+            raise StorageError(f"WAL checkpoint failed during shutdown: {error}") from error
+        self._closed = True
 
     def _record_error(self, error: Exception) -> None:
         with self._lock:

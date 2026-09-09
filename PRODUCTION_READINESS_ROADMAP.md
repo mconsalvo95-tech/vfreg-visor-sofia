@@ -1,6 +1,6 @@
 # VFREG Visor — Production Readiness Roadmap
 
-Last updated: 2026-08-25
+Last updated: 2026-09-09
 
 Current status: Phase 6B functional foundation complete; approved brand assets
 and stakeholder review are pending
@@ -349,30 +349,76 @@ It must not change the confirmed device protocol or safety constraints.
 
 Goal: Operate unattended on the factory PC.
 
-- [ ] Verify automatic reconnection after the Ethernet cable is disconnected.
-- [ ] Verify automatic reconnection after the NT1-B is rebooted.
-- [ ] Verify recovery after Windows sleep or network-adapter reset.
-- [ ] Add graceful shutdown and confirm queued records are flushed.
-- [ ] Add health information for the collector, storage writer, and last valid
+- [ ] Verify automatic reconnection after the Ethernet cable is disconnected
+  (home test 2026-09-06 UDP/VFREG-SIM only: collector-first dashboard moved
+  DISCONNECTED/WAITING to CONNECTED when the simulator started; does not
+  validate real Ethernet cable disconnect).
+- [ ] Verify automatic reconnection after the NT1-B is rebooted (factory
+  hardware validation pending).
+- [ ] Verify recovery after Windows sleep or network-adapter reset (home test
+  2026-09-09: AC RTCWAKE=1 via wake helper; `powercfg /lastwake` attributed
+  auto-wake to `NT TASK\VFREG-VISOR-SOFIA-HOME-TEST`; task LastRunTime 02:13:00,
+  collector PID 37932 started 02:13:00 with `--no-browser`; simulator PID 10200
+  survived sleep; `/api/status` CONNECTED; SQLite 1586→2371; 2026-09-07 retry
+  with temporary RTCWAKE=1 also passed, first 09-07 attempt failed under
+  RTCWAKE=2; factory network-adapter reset and production sleep policy pending).
+- [x] Add graceful shutdown and confirm queued records are flushed (home test
+  2026-09-06: frozen portable exe CTRL+BREAK stop exit 0 ~1.05s; final stopped
+  JSON log; queue drained; SQLite rows 646→652; WAL 0; listening ports free).
+- [ ] Handle Windows console X/logoff/shutdown as best-effort bounded graceful
+  shutdown (implementation complete: SetConsoleCtrlHandler + main-thread shared
+  cleanup budget; home evidence 2026-09-07 Windows Terminal WM_CLOSE — stopped
+  log + WAL=0 but process exit 0xC000013A; Ctrl+C preferred; Task Scheduler End
+  remains abrupt; factory/classic-host/reboot-with-running-collector operational
+  verification pending).
+- [x] Add health information for the collector, storage writer, and last valid
   reading.
-- [ ] Add structured operational logs with timestamps and severity.
-- [ ] Use Windows Task Scheduler for the initial unattended deployment and
+- [x] Add structured operational logs with timestamps and severity.
+- [x] Use Windows Task Scheduler for the initial unattended deployment and
   provide an installation script that creates or updates the task safely.
 - [ ] Start the collector every day at `05:50` so it is ready before production
-  begins at `06:00`.
+  begins at `06:00` (script default `-DailyStartTime 05:50` and configurable
+  HH:mm validation delivered locally; home test 2026-09-06 validated alternate
+  daily triggers at 16:12 and 16:15; factory PC 05:50 trigger not yet verified).
 - [ ] Configure **Run task as soon as possible after a scheduled start is
   missed** and **Wake the computer to run this task** where company policy
-  permits it.
-- [ ] Add a Windows startup or user-logon trigger so a restart also returns the
-  collector to service without waiting until the following day.
+  permits it (script sets both; home 2026-09-09 WakeToRun passed under AC
+  RTCWAKE=1 from the helper; 2026-09-07 failed under RTCWAKE=2 important-only
+  and passed after a temporary RTCWAKE=1; factory IT power-policy on the
+  production PC still pending).
+- [ ] Enable AC RTC wake timers on the production PC where IT approves it
+  (local helper delivered: `Configurar despertar del PC.bat` +
+  `Enable-VFREGWakeTimers.ps1` with backup/restore/audit; AC-only mutation;
+  home 2026-09-09: UAC BAT succeeded, AC RTCWAKE=1 Enabled for H5 test, then
+  `-Restore` returned AC to 2 important-only (DC=0 unchanged); backup/audit
+  present; factory IT sign-off and production enable still pending).
+- [x] Add a Windows startup or user-logon trigger so a restart also returns the
+  collector to service without waiting until the following day (home test
+  2026-09-07 only: reboot 00:56:24, same-user logon 00:57:08, task LastRunTime
+  00:57:11, collector 00:57:45 without simulator then reconnected same PID,
+  SQLite 1573→1578; factory PC restart behavior not yet verified).
 - [ ] Document that the initial portable deployment requires the dedicated
-  Windows operator account to remain signed in; locking the session is allowed.
+  Windows operator account to remain signed in; locking the session is allowed
+  (documented in operator runbook; locked-session operation not yet verified on
+  factory PC).
 - [ ] Keep reconnecting safely when the task starts before the VFREG/NT1-B is
-  powered or reachable.
-- [ ] Avoid opening duplicate dashboard or collector processes.
-- [ ] Configure the scheduled task to keep the existing instance instead of
-  launching another one when the collector is already running.
-- [ ] Provide a safe manual stop/restart procedure.
+  powered or reachable (home test 2026-09-06 UDP/VFREG-SIM only: collector
+  started first and connected once the simulator came up; factory NT1-B timing
+  not yet verified).
+- [ ] Avoid opening duplicate dashboard or collector processes (IgnoreNew and
+  single-instance lock configured locally; duplicate scheduled-task runtime not
+  yet verified on factory PC).
+- [x] Configure the scheduled task to keep the existing instance instead of
+  launching another one when the collector is already running (home test
+  2026-09-06: daily triggers at 16:12 and 16:15 started one simulator-safe
+  collector; second trigger preserved same PID under IgnoreNew; health/readings
+  stayed connected; cleanup removed task/processes; factory PC duplicate-run
+  behavior not yet verified).
+- [x] Provide a safe manual stop/restart procedure (home test 2026-09-06:
+  simulator stop/restart kept the same collector PID and listeners; dashboard
+  cycled DISCONNECTED then CONNECTED; HOME-TEST Task Scheduler stop/start
+  passed though task **End** is abrupt rather than graceful; all tasks and
+  processes cleaned up afterward).
 
 ### Acceptance criteria
 

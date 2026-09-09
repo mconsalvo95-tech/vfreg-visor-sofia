@@ -7,6 +7,57 @@ release.
 
 ## Unreleased
 
+- Windows console close/logoff/shutdown: register a bounded SetConsoleCtrlHandler
+  for CTRL_CLOSE/LOGOFF/SHUTDOWN that requests main-thread graceful shutdown
+  (Ctrl+C and CTRL+BREAK unchanged; Task Scheduler End remains abrupt). Main
+  loop observes the request during dashboard join; cleanup stages share one
+  monotonic budget (4.0s for native console close, 5.0s for Ctrl+C/SIGBREAK);
+  cleanup completion is signaled on every path; dashboard join timeout is
+  recorded as TimeoutError while still running server close, storage
+  drain/checkpoint, and final log. Windows Terminal WM_CLOSE may exit with
+  status 0xC000013A after successful bounded cleanup; verify data integrity via
+  the stopped log and WAL checkpoint (0 bytes), not exit code 0.
+- Fix Windows graceful shutdown: install a SIGBREAK handler and use an
+  interruptible dashboard join so frozen portable exe CTRL+BREAK stops cleanly
+  (home test 2026-09-06: exit 0 ~1.05s; final stopped JSON log; queue drained;
+  SQLite rows 646→652; WAL 0; ports free).
+- Home validation 2026-09-06 (UDP/VFREG-SIM, not real Modbus/Ethernet):
+  collector-first dashboard moved DISCONNECTED/WAITING to CONNECTED when the
+  simulator started; simulator stop/restart preserved collector PID/listeners
+  and cycled DISCONNECTED then CONNECTED; HOME-TEST Task Scheduler stop/start
+  passed (task End abrupt, not graceful); all tasks/processes cleaned up.
+- Home validation 2026-09-09 H5 sleep/wake (UDP/VFREG-SIM, AC RTCWAKE=1 via
+  helper): PC auto-woke at 02:13 for `NT TASK\VFREG-VISOR-SOFIA-HOME-TEST`;
+  collector started 02:13:00 with `--no-browser`; simulator PID survived sleep;
+  dashboard CONNECTED; SQLite 1586→2371; HOME-TEST task removed after the run.
+  Post-test restore via `Enable-VFREGWakeTimers.ps1 -Restore` returned AC
+  RTCWAKE to 2 (important-only, DC=0 unchanged) so this home PC does not wake
+  for other timers. Factory 05:50 and production PC sleep policy remain pending.
+- Home validation 2026-09-07 H5 sleep/wake (UDP/VFREG-SIM): first attempt —
+  WakeToRun did not wake under AC RTCWAKE=2 important-only; manual wake
+  triggered StartWhenAvailable collector launch and data recovery; retry with
+  temporary AC RTCWAKE=1 — PC auto-woke via NT TASK HOME-TEST at 00:41:23,
+  collector 00:41:30, VFREG-SIM resumed, SQLite 948→1547, display off but
+  backend healthy, original AC=2 restored, cleanup passed.
+- Home validation 2026-09-07 H6 reboot/logon (UDP/VFREG-SIM): boot 00:56:24,
+  same-user logon 00:57:08, task LastRunTime 00:57:11, collector 00:57:45
+  without simulator (DISCONNECTED but listener/writer healthy), simulator later
+  connected with same collector PID, SQLite 1573→1578, cleanup passed; Task
+  Scheduler Operational log was empty despite strong attribution.
+- Operator runbook expanded: WakeToRun requires IT-approved AC wake-timer
+  policy; important-only may block wake; scheduled wakes may leave display off
+  while collection runs; installer does not change power policy; Task Scheduler
+  End/Stop is abrupt — use console Ctrl+C for normal shutdown.
+- Added one-click AC wake-timer helper for IT-approved deployments:
+  `Configurar despertar del PC.bat` (UAC elevation) and
+  `Enable-VFREGWakeTimers.ps1` (`-ValidateOnly` read-only inspection,
+  explicit `-Restore` from `data\vfreg-wake-timer-backup.json`, AC-only
+  `SUB_SLEEP RTCWAKE=1`, DC unchanged, idempotent enable, audit trail).
+  Factory IT approval and production validation remain pending.
+- Factory gates still open: real Ethernet/NT1-B reconnect, daily 05:50 trigger,
+  production sleep/wake under IT power policy, locked-session, operator/manager
+  UI validation, network-adapter reset, and multi-day soak on the production PC.
+
 ## 0.4.0.dev1 — 2026-09-06
 
 - Production-readiness work begins from the successful company-PC pilot.
