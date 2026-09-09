@@ -26,6 +26,13 @@ release.
   simulator started; simulator stop/restart preserved collector PID/listeners
   and cycled DISCONNECTED then CONNECTED; HOME-TEST Task Scheduler stop/start
   passed (task End abrupt, not graceful); all tasks/processes cleaned up.
+- Home validation 2026-09-09 H5 sleep/wake (UDP/VFREG-SIM, AC RTCWAKE=1 via
+  helper): PC auto-woke at 02:13 for `NT TASK\VFREG-VISOR-SOFIA-HOME-TEST`;
+  collector started 02:13:00 with `--no-browser`; simulator PID survived sleep;
+  dashboard CONNECTED; SQLite 1586→2371; HOME-TEST task removed after the run.
+  Post-test restore via `Enable-VFREGWakeTimers.ps1 -Restore` returned AC
+  RTCWAKE to 2 (important-only, DC=0 unchanged) so this home PC does not wake
+  for other timers. Factory 05:50 and production PC sleep policy remain pending.
 - Home validation 2026-09-07 H5 sleep/wake (UDP/VFREG-SIM): first attempt —
   WakeToRun did not wake under AC RTCWAKE=2 important-only; manual wake
   triggered StartWhenAvailable collector launch and data recovery; retry with
