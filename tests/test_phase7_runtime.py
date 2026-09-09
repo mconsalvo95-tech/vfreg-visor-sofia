@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import signal
 import socket
 import subprocess
@@ -19,9 +20,14 @@ from unittest.mock import patch
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PORTABLE_DIR = PROJECT_ROOT / "portable"
+FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 SCHEDULER_SCRIPT = PORTABLE_DIR / "Install-VFREGScheduledTask.ps1"
 OPERATOR_RUNBOOK = PORTABLE_DIR / "GUIA-OPERADOR-INICIO-AUTOMATICO.txt"
+WAKE_TIMER_SCRIPT = PORTABLE_DIR / "Enable-VFREGWakeTimers.ps1"
+WAKE_TIMER_BAT = PORTABLE_DIR / "Configurar despertar del PC.bat"
 BUILD_PORTABLE_SCRIPT = PROJECT_ROOT / "build_portable.ps1"
+MOCK_BAT_POWERSHELL = FIXTURES_DIR / "Mock-BatPowerShell.cmd"
+STUB_WAKE_TIMER_SCRIPT = FIXTURES_DIR / "Stub-Enable-VFREGWakeTimers.ps1"
 
 from vfreg_visor.dashboard import (
     DashboardHandler,
@@ -396,6 +402,127 @@ def _run_powershell_script(*args: str, cwd: Path | None = None) -> subprocess.Co
     )
 
 
+def _build_wake_timer_bat_layout(root: Path) -> Path:
+    bat_path = root / WAKE_TIMER_BAT.name
+    shutil.copy(WAKE_TIMER_BAT, bat_path)
+    shutil.copy(STUB_WAKE_TIMER_SCRIPT, root / "Enable-VFREGWakeTimers.ps1")
+    shutil.copy(MOCK_BAT_POWERSHELL, root / "Mock-BatPowerShell.cmd")
+    shutil.copy(
+        FIXTURES_DIR / "Mock-BatPowerShell.ps1",
+        root / "Mock-BatPowerShell.ps1",
+    )
+    return bat_path
+
+
+def _patch_wake_timer_bat_exit_file(bat_path: Path, exit_file: Path) -> None:
+    source = bat_path.read_text(encoding="utf-8")
+    patched = source.replace(
+        'set "VFREG_WAKE_EXITFILE=%TEMP%\\vfreg-wake-exit-%RANDOM%.txt"',
+        f'set "VFREG_WAKE_EXITFILE={exit_file}"',
+    )
+    if patched == source:
+        raise AssertionError("Could not patch wake timer BAT exit file path")
+    bat_path.write_text(patched, encoding="utf-8")
+
+
+def _run_wake_timer_bat(
+    bat_path: Path,
+    *,
+    test_mode: str,
+    cwd: Path,
+) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env["VFREG_BAT_NO_PAUSE"] = "1"
+    env["VFREG_BAT_TEST_MODE"] = test_mode
+    env["VFREG_BAT_POWERSHELL"] = str(cwd / "Mock-BatPowerShell.cmd")
+    return subprocess.run(
+        ["cmd.exe", "/c", str(bat_path)],
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+
+
+def _run_wake_timer_script(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+    command = [
+        "powershell.exe",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        str(WAKE_TIMER_SCRIPT),
+        *args,
+    ]
+    return subprocess.run(
+        command,
+        cwd=str(cwd or PROJECT_ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def _write_mock_powercfg(root: Path, ac: int = 2, dc: int = 2) -> Path:
+    state_path = root / "mock-powercfg-state.json"
+    state_path.write_text(
+        json.dumps(
+            {
+                "scheme": "381b4222-f694-41f0-9685-ff5bb260df2e",
+                "ac": ac,
+                "dc": dc,
+            }
+        ),
+        encoding="utf-8",
+    )
+    mock_script = root / "Mock-PowerCfg.ps1"
+    mock_script.write_text(
+        rf"""
+param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Args)
+$statePath = '{state_path.as_posix()}'
+$state = Get-Content -LiteralPath $statePath -Raw -Encoding UTF8 | ConvertFrom-Json
+$command = $Args[0]
+switch ($command) {{
+    '/getactivescheme' {{
+        Write-Output ("Power Scheme GUID: {{0}}  (Balanced)" -f $state.scheme)
+        exit 0
+    }}
+    '/query' {{
+        if ($Args.Count -ge 4 -and $Args[2] -match '(?i)sleep' -and $Args[3] -match '(?i)rtcwake') {{
+            Write-Output "  Power Setting GUID: bd3b718a-0680-4d9d-8ab2-e1d2b4ac806d  (Allow wake timers)"
+            Write-Output ("    Current AC Power Setting Index: 0x{{0:x8}}" -f [int]$state.ac)
+            Write-Output ("    Current DC Power Setting Index: 0x{{0:x8}}" -f [int]$state.dc)
+            exit 0
+        }}
+        Write-Error "unsupported mock powercfg query: $($Args -join ' ')"
+        exit 9
+    }}
+    '/setacvalueindex' {{
+        if ($Args.Count -lt 5) {{ throw "missing setac args" }}
+        if ($Args[2] -notmatch '(?i)sleep' -or $Args[3] -notmatch '(?i)rtcwake') {{
+            Write-Error "mock powercfg rejected non-RTCWAKE mutation"
+            exit 9
+        }}
+        $state.ac = [int]$Args[4]
+        $json = $state | ConvertTo-Json -Compress
+        [System.IO.File]::WriteAllText($statePath, $json, [System.Text.UTF8Encoding]::new($false))
+        exit 0
+    }}
+    '/setactive' {{
+        exit 0
+    }}
+    default {{
+        Write-Error "unsupported mock powercfg command: $command"
+        exit 9
+    }}
+}}
+""",
+        encoding="utf-8",
+    )
+    return mock_script
+
+
 class ScheduledTaskScriptTests(unittest.TestCase):
     def test_scheduler_script_exists_and_declares_contract(self) -> None:
         source = SCHEDULER_SCRIPT.read_text(encoding="utf-8")
@@ -524,7 +651,325 @@ class ScheduledTaskScriptTests(unittest.TestCase):
     def test_build_portable_includes_scheduler_assets(self) -> None:
         build_source = BUILD_PORTABLE_SCRIPT.read_text(encoding="utf-8")
         self.assertIn("Install-VFREGScheduledTask.ps1", build_source)
+        self.assertIn("Enable-VFREGWakeTimers.ps1", build_source)
+        self.assertIn("Configurar despertar del PC.bat", build_source)
         self.assertIn("GUIA-OPERADOR-INICIO-AUTOMATICO.txt", build_source)
+
+
+class WakeTimerScriptTests(unittest.TestCase):
+    def test_wake_timer_script_exists_and_declares_contract(self) -> None:
+        source = WAKE_TIMER_SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("[switch]$ValidateOnly", source)
+        self.assertIn("[switch]$Restore", source)
+        self.assertIn("[string]$PowerCfgCommand = \"powercfg\"", source)
+        self.assertIn("SUB_SLEEP", source)
+        self.assertIn("RTCWAKE", source)
+        self.assertIn("/setacvalueindex", source)
+        self.assertIn("/setactive", source)
+        self.assertIn("vfreg-wake-timer-backup.json", source)
+        self.assertIn("vfreg-wake-timer-audit.jsonl", source)
+        self.assertNotIn("setdcvalueindex", source.lower())
+        self.assertNotIn("/setdcvalueindex", source.lower())
+
+    def test_validate_only_reports_active_scheme_and_intended_change(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mock = _write_mock_powercfg(root, ac=2, dc=1)
+            result = _run_wake_timer_script(
+                "-ValidateOnly",
+                "-DeploymentRoot",
+                str(root),
+                "-PowerCfgCommand",
+                str(mock),
+            )
+            self.assertEqual(result.returncode, 0, msg=result.stderr or result.stdout)
+            payload = json.loads(result.stdout.strip())
+            self.assertEqual(payload["mode"], "validate")
+            self.assertEqual(payload["rtc_wake_ac"], 2)
+            self.assertEqual(payload["rtc_wake_dc"], 1)
+            self.assertEqual(payload["intended_ac"], 1)
+            self.assertTrue(payload["dc_unchanged"])
+            self.assertFalse(payload["idempotent"])
+
+    @unittest.skipUnless(sys.platform == "win32", "ValidateOnly uses local powercfg")
+    def test_validate_only_against_real_powercfg_is_non_mutating(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            before = _run_wake_timer_script("-ValidateOnly", "-DeploymentRoot", str(root))
+            self.assertEqual(before.returncode, 0, msg=before.stderr or before.stdout)
+            before_payload = json.loads(before.stdout.strip())
+            after = _run_wake_timer_script("-ValidateOnly", "-DeploymentRoot", str(root))
+            self.assertEqual(after.returncode, 0, msg=after.stderr or after.stdout)
+            after_payload = json.loads(after.stdout.strip())
+            self.assertEqual(
+                before_payload["rtc_wake_ac"],
+                after_payload["rtc_wake_ac"],
+            )
+            self.assertEqual(
+                before_payload["rtc_wake_dc"],
+                after_payload["rtc_wake_dc"],
+            )
+            self.assertFalse((root / "data" / "vfreg-wake-timer-backup.json").exists())
+
+    def test_validate_only_with_restore_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mock = _write_mock_powercfg(root)
+            result = _run_wake_timer_script(
+                "-ValidateOnly",
+                "-Restore",
+                "-DeploymentRoot",
+                str(root),
+                "-PowerCfgCommand",
+                str(mock),
+            )
+            self.assertNotEqual(result.returncode, 0, msg=result.stderr or result.stdout)
+            combined = re.sub(r"\s+", " ", f"{result.stdout} {result.stderr}")
+            self.assertIn("ValidateOnly", combined)
+            self.assertIn("Restore", combined)
+
+    def test_enable_is_idempotent_and_preserves_original_backup(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mock = _write_mock_powercfg(root, ac=2, dc=2)
+            common = [
+                "-DeploymentRoot",
+                str(root),
+                "-PowerCfgCommand",
+                str(mock),
+                "-SkipAdminCheck",
+            ]
+            first = _run_wake_timer_script(*common)
+            self.assertEqual(first.returncode, 0, msg=first.stderr or first.stdout)
+            backup_path = root / "data" / "vfreg-wake-timer-backup.json"
+            self.assertTrue(backup_path.exists())
+            original_backup = json.loads(backup_path.read_text(encoding="utf-8"))
+            self.assertEqual(original_backup["previous_ac"], 2)
+            self.assertEqual(original_backup["previous_dc"], 2)
+            self.assertEqual(original_backup["new_ac"], 1)
+
+            second = _run_wake_timer_script(*common)
+            self.assertEqual(second.returncode, 0, msg=second.stderr or second.stdout)
+            preserved = json.loads(backup_path.read_text(encoding="utf-8"))
+            self.assertEqual(preserved, original_backup)
+
+            state = json.loads((root / "mock-powercfg-state.json").read_text(encoding="utf-8"))
+            self.assertEqual(state["ac"], 1)
+            self.assertEqual(state["dc"], 2)
+
+    def test_restore_uses_validated_backup_and_leaves_dc_unchanged(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mock = _write_mock_powercfg(root, ac=2, dc=3)
+            enable = _run_wake_timer_script(
+                "-DeploymentRoot",
+                str(root),
+                "-PowerCfgCommand",
+                str(mock),
+                "-SkipAdminCheck",
+            )
+            self.assertEqual(enable.returncode, 0, msg=enable.stderr or enable.stdout)
+
+            state_path = root / "mock-powercfg-state.json"
+            mutated = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual(mutated["ac"], 1)
+            self.assertEqual(mutated["dc"], 3)
+
+            restore = _run_wake_timer_script(
+                "-Restore",
+                "-DeploymentRoot",
+                str(root),
+                "-PowerCfgCommand",
+                str(mock),
+                "-SkipAdminCheck",
+            )
+            self.assertEqual(restore.returncode, 0, msg=restore.stderr or restore.stdout)
+            restored = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual(restored["ac"], 2)
+            self.assertEqual(restored["dc"], 3)
+
+    def test_restore_fails_without_backup(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mock = _write_mock_powercfg(root)
+            result = _run_wake_timer_script(
+                "-Restore",
+                "-DeploymentRoot",
+                str(root),
+                "-PowerCfgCommand",
+                str(mock),
+                "-SkipAdminCheck",
+            )
+            self.assertNotEqual(result.returncode, 0)
+            combined = re.sub(r"\s+", " ", f"{result.stdout} {result.stderr}")
+            self.assertIn("backup not found", combined.lower())
+
+    def test_enable_without_admin_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mock = _write_mock_powercfg(root)
+            result = _run_wake_timer_script(
+                "-DeploymentRoot",
+                str(root),
+                "-PowerCfgCommand",
+                str(mock),
+            )
+            if result.returncode == 0:
+                self.skipTest("shell already elevated; admin rejection not observable")
+            combined = re.sub(r"\s+", " ", f"{result.stdout} {result.stderr}")
+            self.assertIn("Administrator rights are required", combined)
+
+
+class WakeTimerBatTests(unittest.TestCase):
+    def test_wake_timer_bat_quotes_paths_and_handles_uac_exit_codes(self) -> None:
+        source = WAKE_TIMER_BAT.read_text(encoding="utf-8")
+        self.assertIn('cd /d "%~dp0"', source)
+        self.assertIn("VFREG_WAKE_SCRIPT", source)
+        self.assertIn("VFREG_DEPLOY_ROOT", source)
+        self.assertIn("VFREG_WAKE_EXITFILE", source)
+        self.assertIn("-Verb RunAs", source)
+        self.assertIn("-ArgumentList $argLine", source)
+        self.assertIn("[char]34", source)
+        self.assertIn("-DeploymentRoot", source)
+        self.assertIn("-ExitFile", source)
+        self.assertIn("1223", source)
+        self.assertIn(":validate_sentinel", source)
+        self.assertIn(":err_elevation", source)
+        self.assertIn("No se pudo completar la elevacion de administrador", source)
+        self.assertIn("UAC cancelado o acceso denegado", source)
+        self.assertIn(":maybe_pause", source)
+        self.assertIn("VFREG_BAT_NO_PAUSE", source)
+        self.assertIn("VFREG_BAT_POWERSHELL", source)
+        self.assertIn('call "%VFREG_PS%"', source)
+        self.assertNotIn("ArgumentList @(", source)
+        self.assertNotIn("exit $p.ExitCode", source)
+        self.assertNotIn("196608", source)
+        self.assertNotIn("FFFD0000", source)
+        self.assertNotIn("(codigo", source.lower())
+        self.assertNotIn("setx", source.lower())
+        self.assertNotIn("powercfg", source.lower())
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows-only BAT wrapper")
+    def test_wake_timer_bat_end_to_end_success_without_uac(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="vfreg bat ok ") as directory:
+            root = Path(directory)
+            bat_path = _build_wake_timer_bat_layout(root)
+            result = _run_wake_timer_bat(bat_path, test_mode="success", cwd=root)
+            combined = f"{result.stdout}\n{result.stderr}"
+            self.assertEqual(result.returncode, 0, msg=combined)
+            self.assertIn("Listo: despertador RTC habilitado", combined)
+            self.assertNotIn("No se esperaba", combined)
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows-only BAT wrapper")
+    def test_wake_timer_bat_end_to_end_failure_without_parser_error(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="vfreg bat fail ") as directory:
+            root = Path(directory)
+            bat_path = _build_wake_timer_bat_layout(root)
+            result = _run_wake_timer_bat(bat_path, test_mode="fail", cwd=root)
+            combined = f"{result.stdout}\n{result.stderr}"
+            self.assertEqual(result.returncode, 9, msg=combined)
+            self.assertIn("Codigo 9", combined)
+            self.assertNotIn("No se esperaba", combined)
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows-only BAT wrapper")
+    def test_wake_timer_bat_end_to_end_uac_cancel(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="vfreg bat uac ") as directory:
+            root = Path(directory)
+            bat_path = _build_wake_timer_bat_layout(root)
+            result = _run_wake_timer_bat(bat_path, test_mode="cancel", cwd=root)
+            combined = f"{result.stdout}\n{result.stderr}"
+            self.assertEqual(result.returncode, 1223, msg=combined)
+            self.assertIn("UAC cancelado o acceso denegado", combined)
+            self.assertNotIn("No se esperaba", combined)
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows-only BAT wrapper")
+    def test_wake_timer_bat_elevation_argument_list_quotes_paths_with_spaces(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="vfreg bat args ") as directory:
+            root = Path(directory)
+            bat_path = _build_wake_timer_bat_layout(root)
+            result = _run_wake_timer_bat(bat_path, test_mode="inspect_args", cwd=root)
+            combined = f"{result.stdout}\n{result.stderr}"
+            self.assertEqual(result.returncode, 0, msg=combined)
+            argline_path = root / "mock-elevated-argline.txt"
+            self.assertTrue(argline_path.is_file(), msg=combined)
+            argline = argline_path.read_text(encoding="utf-8")
+            quoted_script = f'"{root / "Enable-VFREGWakeTimers.ps1"}"'
+            quoted_root = f'"{root}"'
+            self.assertIn(quoted_script, argline)
+            self.assertIn(quoted_root, argline)
+            self.assertIn("-ExitFile", argline)
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows-only BAT wrapper")
+    def test_wake_timer_bat_bad_process_exit_with_fresh_sentinel_succeeds(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="vfreg bat sentinel ok ") as directory:
+            root = Path(directory)
+            bat_path = _build_wake_timer_bat_layout(root)
+            result = _run_wake_timer_bat(bat_path, test_mode="bad_exit_ok", cwd=root)
+            combined = f"{result.stdout}\n{result.stderr}"
+            self.assertEqual(result.returncode, 0, msg=combined)
+            self.assertIn("Listo: despertador RTC habilitado", combined)
+            self.assertNotIn("-196608", combined)
+            self.assertNotIn("196608", combined)
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows-only BAT wrapper")
+    def test_wake_timer_bat_missing_sentinel_reports_clear_elevation_error(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="vfreg bat no sentinel ") as directory:
+            root = Path(directory)
+            bat_path = _build_wake_timer_bat_layout(root)
+            result = _run_wake_timer_bat(bat_path, test_mode="missing_sentinel", cwd=root)
+            combined = f"{result.stdout}\n{result.stderr}"
+            self.assertEqual(result.returncode, 1259, msg=combined)
+            self.assertIn("No se pudo completar la elevacion de administrador", combined)
+            self.assertNotIn("-196608", combined)
+            self.assertNotIn("196608", combined)
+            self.assertNotIn("FFFD0000", combined)
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows-only BAT wrapper")
+    def test_wake_timer_bat_removes_stale_sentinel_before_launch(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="vfreg bat stale ") as directory:
+            root = Path(directory)
+            bat_path = _build_wake_timer_bat_layout(root)
+            exit_file = root / "vfreg-wake-exit-stale.txt"
+            _patch_wake_timer_bat_exit_file(bat_path, exit_file)
+            exit_file.write_text("0", encoding="utf-8")
+            result = _run_wake_timer_bat(bat_path, test_mode="missing_sentinel", cwd=root)
+            combined = f"{result.stdout}\n{result.stderr}"
+            self.assertEqual(result.returncode, 1259, msg=combined)
+            self.assertIn("No se pudo completar la elevacion de administrador", combined)
+            self.assertNotIn("Listo: despertador RTC habilitado", combined)
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows-only BAT wrapper")
+    def test_wake_timer_bat_launches_elevation_exactly_once(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="vfreg bat once ") as directory:
+            root = Path(directory)
+            bat_path = _build_wake_timer_bat_layout(root)
+            result = _run_wake_timer_bat(bat_path, test_mode="success", cwd=root)
+            combined = f"{result.stdout}\n{result.stderr}"
+            self.assertEqual(result.returncode, 0, msg=combined)
+            counter_path = root / "mock-launch-count.txt"
+            self.assertEqual(counter_path.read_text(encoding="utf-8").strip(), "1")
+
+    def test_wake_timer_bat_parses_powershell_ast(self) -> None:
+        ps1 = WAKE_TIMER_SCRIPT.read_text(encoding="utf-8")
+        parse_cmd = (
+            "$errs = $null; "
+            f"$null = [System.Management.Automation.Language.Parser]::ParseFile('{WAKE_TIMER_SCRIPT}', [ref]$null, [ref]$errs); "
+            "if ($errs) { $errs | ForEach-Object { $_.ToString() }; exit 1 }"
+        )
+        result = subprocess.run(
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-Command",
+                parse_cmd,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, msg=result.stderr or result.stdout)
+        self.assertIn("ValidateOnly", ps1)
+        self.assertIn("Restore", ps1)
 
 
 class OperatorRunbookTests(unittest.TestCase):
@@ -534,7 +979,13 @@ class OperatorRunbookTests(unittest.TestCase):
             "05:50",
             "dailystarttime",
             "install-vfregscheduledtask.ps1",
+            "enable-vfregwaketimers.ps1",
+            "configurar despertar del pc.bat",
             "-validateonly",
+            "-restore",
+            "vfreg-wake-timer-backup.json",
+            "uac",
+            "solo con corriente ac",
             "-remove",
             "pruebas en casa",
             "vfreg-prueba-casa",

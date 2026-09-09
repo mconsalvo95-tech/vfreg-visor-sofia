@@ -41,6 +41,12 @@ release.
   policy; important-only may block wake; scheduled wakes may leave display off
   while collection runs; installer does not change power policy; Task Scheduler
   End/Stop is abrupt — use console Ctrl+C for normal shutdown.
+- Added one-click AC wake-timer helper for IT-approved deployments:
+  `Configurar despertar del PC.bat` (UAC elevation) and
+  `Enable-VFREGWakeTimers.ps1` (`-ValidateOnly` read-only inspection,
+  explicit `-Restore` from `data\vfreg-wake-timer-backup.json`, AC-only
+  `SUB_SLEEP RTCWAKE=1`, DC unchanged, idempotent enable, audit trail).
+  Factory IT approval and production validation remain pending.
 - Factory gates still open: real Ethernet/NT1-B reconnect, daily 05:50 trigger,
   production sleep/wake under IT power policy, locked-session, operator/manager
   UI validation, network-adapter reset, and multi-day soak on the production PC.

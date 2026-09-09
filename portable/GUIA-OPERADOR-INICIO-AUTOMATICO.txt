@@ -69,8 +69,26 @@ ENERGIA, DESPERTAR Y POLITICA DE IT
 - Un despertar programado puede dejar la pantalla apagada mientras el colector
   ya funciona en segundo plano; verificar http://127.0.0.1:8000/api/status si
   hay duda.
-- El instalador NO modifica la politica de energia de Windows; cualquier cambio
-  requiere aprobacion explicita de IT/planta en la PC de produccion.
+- El instalador de tareas (Install-VFREGScheduledTask.ps1) NO modifica la
+  politica de energia de Windows.
+- Si IT/planta autoriza habilitar despertadores RTC solo con corriente AC, usar
+  el acceso directo de un clic "Configurar despertar del PC.bat". Windows
+  pedira permiso de administrador (UAC). Si cancela UAC o aparece acceso
+  denegado, no se cambia nada.
+- Ese asistente solo cambia el valor AC de SUB_SLEEP RTCWAKE al plan activo
+  (habilitar despertadores, no solo "importantes"). No modifica la
+  configuracion con bateria/DC.
+- Antes del primer cambio guarda un respaldo en data\vfreg-wake-timer-backup.json
+  y registra auditoria en data\vfreg-wake-timer-audit.jsonl. Repetir el
+  asistente es idempotente y no sobrescribe el respaldo original.
+- Para inspeccion sin cambios:
+
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Enable-VFREGWakeTimers.ps1 -ValidateOnly
+
+- Para restaurar el valor AC original desde el respaldo (requiere UAC/admin):
+
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Enable-VFREGWakeTimers.ps1 -Restore
+
 - Con bateria (portatil o sin AC), Windows puede no despertar la PC para
   tareas programadas; la PC dedicada de planta debe permanecer conectada a
   corriente.

@@ -57,6 +57,8 @@ Copy-Item -LiteralPath (Join-Path $projectRoot "config.factory.json") -Destinati
 Copy-Item -LiteralPath (Join-Path $projectRoot "portable\Start VFREG Visor.bat") -Destination $packageRoot -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "portable\LEEME-EMPRESA.txt") -Destination $packageRoot -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "portable\Install-VFREGScheduledTask.ps1") -Destination $packageRoot -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot "portable\Enable-VFREGWakeTimers.ps1") -Destination $packageRoot -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot "portable\Configurar despertar del PC.bat") -Destination $packageRoot -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "portable\GUIA-OPERADOR-INICIO-AUTOMATICO.txt") -Destination $packageRoot -Force
 New-Item -ItemType Directory -Force -Path (Join-Path $packageRoot "data\factory") | Out-Null
 

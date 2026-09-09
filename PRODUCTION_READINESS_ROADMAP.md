@@ -384,6 +384,11 @@ Goal: Operate unattended on the factory PC.
   RTCWAKE=2 important-only; manual wake recovered via StartWhenAvailable;
   retry with temporary RTCWAKE=1 auto-woke and collector resumed; factory IT
   power-policy confirmation pending).
+- [ ] Enable AC RTC wake timers on the production PC where IT approves it
+  (local helper delivered: `Configurar despertar del PC.bat` +
+  `Enable-VFREGWakeTimers.ps1` with backup/restore/audit; AC-only mutation;
+  home 2026-09-09: UAC BAT succeeded, AC RTCWAKE=1 Enabled, DC=0 unchanged,
+  backup/audit present, repeat run idempotent; factory IT sign-off still pending).
 - [x] Add a Windows startup or user-logon trigger so a restart also returns the
   collector to service without waiting until the following day (home test
   2026-09-07 only: reboot 00:56:24, same-user logon 00:57:08, task LastRunTime
