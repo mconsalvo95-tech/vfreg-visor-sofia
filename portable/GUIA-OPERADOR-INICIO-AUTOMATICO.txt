@@ -99,6 +99,13 @@ Para abrir el tablero en el navegador durante la jornada:
 
   Doble clic en "Start VFREG Visor.bat"
 
+Ese acceso directo tambien registra o actualiza la tarea diaria VFREG-VISOR-SOFIA
+a las 05:50 en la PC donde se ejecuta (mismo comportamiento que el paso 6 de
+"Instalar o actualizar"). Si la tarea no se puede registrar, muestra una
+advertencia y aun asi inicia el colector. No requiere administrador ni cambia
+la politica de energia. Usar SOLO en la PC dedicada de planta; no ejecutarlo en
+una PC personal o de prueba en casa.
+
 O desde PowerShell en la carpeta de despliegue:
 
   & ".\VFREG-VISOR-SOFIA.exe" --config ".\config.factory.json"

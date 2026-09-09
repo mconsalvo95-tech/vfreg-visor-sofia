@@ -22,6 +22,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PORTABLE_DIR = PROJECT_ROOT / "portable"
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 SCHEDULER_SCRIPT = PORTABLE_DIR / "Install-VFREGScheduledTask.ps1"
+START_BAT = PORTABLE_DIR / "Start VFREG Visor.bat"
 OPERATOR_RUNBOOK = PORTABLE_DIR / "GUIA-OPERADOR-INICIO-AUTOMATICO.txt"
 WAKE_TIMER_SCRIPT = PORTABLE_DIR / "Enable-VFREGWakeTimers.ps1"
 WAKE_TIMER_BAT = PORTABLE_DIR / "Configurar despertar del PC.bat"
@@ -654,6 +655,33 @@ class ScheduledTaskScriptTests(unittest.TestCase):
         self.assertIn("Enable-VFREGWakeTimers.ps1", build_source)
         self.assertIn("Configurar despertar del PC.bat", build_source)
         self.assertIn("GUIA-OPERADOR-INICIO-AUTOMATICO.txt", build_source)
+
+
+class StartBatTests(unittest.TestCase):
+    def test_start_bat_registers_daily_task_before_launching_exe(self) -> None:
+        source = START_BAT.read_text(encoding="utf-8")
+        install_idx = source.lower().find("install-vfregscheduledtask.ps1")
+        exe_idx = source.lower().find("vfreg-visor-sofia.exe")
+        self.assertNotEqual(install_idx, -1)
+        self.assertNotEqual(exe_idx, -1)
+        self.assertLess(install_idx, exe_idx)
+        self.assertIn("-DeploymentRoot", source)
+        self.assertNotIn("Enable-VFREGWakeTimers", source)
+        self.assertNotIn("-Verb RunAs", source)
+
+    def test_start_bat_continues_collector_launch_when_install_fails(self) -> None:
+        source = START_BAT.read_text(encoding="utf-8")
+        self.assertRegex(source, r"(?i)if errorlevel 1")
+        self.assertIn("ADVERTENCIA", source)
+        warning_idx = source.find("ADVERTENCIA")
+        exe_idx = source.lower().find("vfreg-visor-sofia.exe")
+        self.assertLess(warning_idx, exe_idx)
+
+    def test_operator_runbook_documents_start_bat_task_registration(self) -> None:
+        runbook = OPERATOR_RUNBOOK.read_text(encoding="utf-8")
+        self.assertIn("Start VFREG Visor.bat", runbook)
+        self.assertIn("05:50", runbook)
+        self.assertRegex(runbook, r"(?i)PC personal|personal o de prueba")
 
 
 class WakeTimerScriptTests(unittest.TestCase):
