@@ -21,12 +21,19 @@ from vfreg_visor.exports import (
     MAX_XLSX_DATA_ROWS,
     XlsxRowLimitError,
     build_chart_points,
+    build_daily_xlsx,
     build_xlsx,
     regular_chart_buckets,
     sampled_row_numbers,
 )
 from vfreg_visor.storage import Measurement, append_sqlite, measurement_snapshot
-from vfreg_visor.xlsx_report import MAX_CHART_POINTS_PER_PAGE, STRIP_SAMPLES
+from vfreg_visor.xlsx_report import (
+    DAILY_REPORT_TITLE,
+    DAILY_XLSX_DOWNLOAD_FILENAME,
+    LECTURAS_TITLE,
+    MAX_CHART_POINTS_PER_PAGE,
+    STRIP_SAMPLES,
+)
 
 
 class XlsxExportTests(unittest.TestCase):
@@ -53,6 +60,167 @@ class XlsxExportTests(unittest.TestCase):
                     quality_flag=quality[0] if quality else "GOOD",
                 ),
             )
+
+    def test_daily_xlsx_averages_one_row_per_calendar_day(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            cfg = self._cfg(directory)
+            output_path = os.path.join(directory, "daily.xlsx")
+            self._append(
+                cfg,
+                (
+                    ("2026-09-07T10:00:00-03:00", 35, 340, 202),
+                    ("2026-09-07T10:01:00-03:00", 0, 0, 202),
+                    ("2026-09-07T10:04:00-03:00", 72, 860, 218),
+                    ("2026-09-08T09:00:00-03:00", 40, 400, 210),
+                    ("2026-09-08T09:01:00-03:00", 900, 900, 900, "INVALID"),
+                ),
+            )
+            build_daily_xlsx(
+                cfg,
+                output_path=output_path,
+                start_time="2026-09-07T00:00:00",
+                end_time="2026-09-10T23:59:59",
+            )
+
+            self.assertEqual(
+                DAILY_XLSX_DOWNLOAD_FILENAME,
+                "Promedios diarios de insensibilización.xlsx",
+            )
+            workbook = load_workbook(output_path, data_only=False)
+            lecturas = workbook["Lecturas"]
+            resumen = workbook["Resumen"]
+            self.assertEqual(workbook.sheetnames, ["Lecturas", "Resumen"])
+            self.assertEqual(workbook.active.title, "Lecturas")
+            self.assertNotIn("Datos", workbook.sheetnames)
+            self.assertNotIn("Raw Data", workbook.sheetnames)
+
+            self.assertEqual(lecturas["A1"].value, LECTURAS_TITLE)
+            self.assertEqual(
+                [lecturas.cell(10, column).value for column in range(1, 5)],
+                ["Time", "Voltaje (V)", "Corriente (mA)", "Frecuencia (Hz)"],
+            )
+            self.assertIsInstance(lecturas["A11"].value, datetime)
+            self.assertAlmostEqual(lecturas["B11"].value, 35)
+            self.assertEqual(lecturas.max_row, 15)
+            self.assertEqual(lecturas.freeze_panes, "A11")
+            self.assertIsNone(lecturas["B3"].value)
+            self.assertIsNone(lecturas["C3"].value)
+            self.assertIsNone(lecturas["B4"].value)
+            self.assertIsNone(lecturas["C5"].value)
+
+            self.assertEqual(resumen["A1"].value, DAILY_REPORT_TITLE)
+            headers = [resumen.cell(6, column).value for column in range(1, 17)]
+            self.assertIn("Fecha", headers)
+            self.assertIn("REGISTROS", headers)
+            self.assertIn("INICIO", headers)
+            self.assertIn("FIN", headers)
+            self.assertEqual(resumen["B6"].value, "Promedio\nVoltaje (V)")
+            self.assertEqual(resumen["B6"].alignment.horizontal, "center")
+            self.assertEqual(resumen["B6"].alignment.vertical, "center")
+            self.assertEqual(resumen["B6"].alignment.wrap_text, True)
+            self.assertEqual(resumen["A7"].value, "07-sep-26")
+            self.assertEqual(resumen["A8"].value, "08-sep-26")
+            self.assertAlmostEqual(resumen["B7"].value, 53.5)
+            self.assertAlmostEqual(resumen["C7"].value, 600.0)
+            self.assertAlmostEqual(resumen["D7"].value, 207.33333333333334)
+            self.assertEqual(resumen["H7"].value, 3)
+            self.assertAlmostEqual(resumen["B8"].value, 40.0)
+            self.assertEqual(resumen["H8"].value, 2)
+            for sheet in (lecturas, resumen):
+                for row in sheet.iter_rows(min_row=1, max_row=sheet.max_row):
+                    for cell in row:
+                        if isinstance(cell.value, str):
+                            self.assertNotIn("AVERAGEIFS", cell.value)
+
+            self.assertEqual(len(lecturas._charts), 0)
+            self.assertEqual(len(resumen._charts), 3)
+            self.assertTrue(
+                all(type(chart).__name__ == "LineChart" for chart in resumen._charts)
+            )
+
+            with ZipFile(output_path) as archive:
+                archive_names = archive.namelist()
+                table_xml = [
+                    archive.read(name).decode("utf-8")
+                    for name in archive_names
+                    if name.startswith("xl/tables/") and name.endswith(".xml")
+                ]
+                chart_xml = [
+                    archive.read(name).decode("utf-8")
+                    for name in archive_names
+                    if name.startswith("xl/charts/chart") and name.endswith(".xml")
+                ]
+            self.assertTrue(any('name="Tabla"' in xml and 'ref="A10:H15"' in xml for xml in table_xml))
+            self.assertEqual(len(chart_xml), 3)
+            for xml, title, y_name in zip(
+                chart_xml,
+                (
+                    "Voltaje diario (V)",
+                    "Corriente diaria (mA)",
+                    "Frecuencia diaria (Hz)",
+                ),
+                (
+                    "Voltaje (V)",
+                    "Corriente (mA)",
+                    "Frecuencia (Hz)",
+                ),
+            ):
+                self.assertIn("<c:lineChart>", xml)
+                self.assertIn(title, xml)
+                self.assertIn(y_name, xml)
+                self.assertIn("'Resumen'!$A$7:$A$8", xml)
+                self.assertNotIn("<c:dateAx>", xml)
+                self.assertEqual(xml.count("<c:ser>"), 1)
+                self.assertIn("<c:v>Promedio</c:v>", xml)
+                self.assertNotIn("<c:v>Mínimo</c:v>", xml)
+                self.assertNotIn("<c:v>Máximo</c:v>", xml)
+                self.assertIn("<c:dLbls>", xml)
+                self.assertIn("<c:showVal", xml)
+            current_axis_max = float(
+                re.search(r'<c:max[^>]*val="([^"]+)"', chart_xml[1]).group(1)
+            )
+            self.assertGreater(current_axis_max, 650)
+            self.assertTrue(
+                any(
+                    name.startswith("xl/media/") and name.lower().endswith(".png")
+                    for name in archive_names
+                )
+                or not any(name.startswith("xl/drawings/") for name in archive_names)
+            )
+
+    def test_daily_xlsx_empty_period_has_note_without_table_or_charts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            cfg = self._cfg(directory)
+            output_path = os.path.join(directory, "daily-empty.xlsx")
+            self._append(
+                cfg,
+                (("2026-09-07T10:00:00-03:00", 35, 340, 202),),
+            )
+            build_daily_xlsx(
+                cfg,
+                output_path=output_path,
+                start_time="2026-09-20T00:00:00",
+                end_time="2026-09-21T23:59:59",
+            )
+
+            workbook = load_workbook(output_path, data_only=False)
+            lecturas = workbook["Lecturas"]
+            resumen = workbook["Resumen"]
+            self.assertEqual(lecturas["A1"].value, LECTURAS_TITLE)
+            self.assertEqual(lecturas["A10"].value, "Time")
+            self.assertEqual(
+                lecturas["A11"].value,
+                "No hay lecturas para el período seleccionado.",
+            )
+            self.assertEqual(len(resumen._charts), 0)
+
+            with ZipFile(output_path) as archive:
+                table_names = [
+                    name
+                    for name in archive.namelist()
+                    if name.startswith("xl/tables/") and name.endswith(".xml")
+                ]
+            self.assertEqual(table_names, [])
 
     def test_native_line_report_preserves_raw_data_and_uses_visible_supporting_data(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -467,6 +635,31 @@ class XlsxExportTests(unittest.TestCase):
             self.assertEqual(workbook["Raw Data"].max_row, 2)
             self.assertIn("Lecturas usadas: 1", workbook["Report"]["M1"].value)
 
+    def test_voltage_chart_axis_follows_measured_values_not_limit_span(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            cfg = self._cfg(directory)
+            self._append(
+                cfg,
+                (
+                    ("2026-08-21T10:00:00-03:00", 114.8, 1200, 800),
+                    ("2026-08-21T10:01:00-03:00", 115.0, 1210, 805),
+                    ("2026-08-21T10:02:00-03:00", 115.4, 1190, 798),
+                ),
+            )
+            build_xlsx(cfg, chart_interval_minutes=1)
+            with ZipFile(cfg["output_xlsx"]) as archive:
+                chart_names = [
+                    name
+                    for name in archive.namelist()
+                    if name.startswith("xl/charts/chart") and name.endswith(".xml")
+                ]
+                chart_xml = archive.read(sorted(chart_names)[0]).decode("utf-8")
+            axis_min = float(re.search(r'<c:min[^>]*val="([^"]+)"', chart_xml).group(1))
+            axis_max = float(re.search(r'<c:max[^>]*val="([^"]+)"', chart_xml).group(1))
+            self.assertGreater(axis_min, 110)
+            self.assertLess(axis_max, 121)
+            self.assertLess(axis_max - axis_min, 8)
+
     def test_limits_and_point_caps_keep_existing_failure_behavior(self) -> None:
         cfg = {"output_sqlite": "unused.sqlite", "output_xlsx": "unused.xlsx"}
 
@@ -479,6 +672,8 @@ class XlsxExportTests(unittest.TestCase):
         ):
             with self.assertRaises(XlsxRowLimitError):
                 build_xlsx(cfg)
+            with self.assertRaises(XlsxRowLimitError):
+                build_daily_xlsx(cfg)
         with self.assertRaises(ChartPointLimitError):
             regular_chart_buckets(
                 [

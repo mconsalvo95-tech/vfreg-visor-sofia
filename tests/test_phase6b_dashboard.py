@@ -65,9 +65,12 @@ class Phase6BDashboardTests(unittest.TestCase):
             "history-filter-form",
             "csv-export",
             "xlsx-export",
+            "daily-export",
             "history-chart",
             "app-version",
             "last-reading",
+            "archive-wipe-open",
+            "archive-wipe-dialog",
         ):
             self.assertIn(f'id="{element_id}"', html)
 
@@ -77,6 +80,18 @@ class Phase6BDashboardTests(unittest.TestCase):
         self.assertIn('elements.connectionLabel.textContent = "Conectado"', javascript)
         self.assertIn('paused: ["Producción detenida"', javascript)
         self.assertIn("frequencyMin", javascript)
+
+    def test_report_download_names_match_report_title(self) -> None:
+        javascript = (DASHBOARD_ROOT / "app.js").read_text(encoding="utf-8")
+        self.assertIn('CSV_DOWNLOAD_NAME = "Reporte de insensibilización.csv"', javascript)
+        self.assertIn(
+            'XLSX_DOWNLOAD_NAME = "Reporte de insensibilización + graficos.xlsx"',
+            javascript,
+        )
+        self.assertIn(
+            'DAILY_XLSX_DOWNLOAD_NAME = "Promedios diarios de insensibilización.xlsx"',
+            javascript,
+        )
 
     def test_dashboard_does_not_add_device_control_or_real_address(self) -> None:
         combined = "\n".join(

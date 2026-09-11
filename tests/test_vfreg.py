@@ -15,6 +15,7 @@ import sqlite3
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from importlib.metadata import version as package_version
@@ -449,6 +450,80 @@ class StorageTests(unittest.TestCase):
                 [row["source"] for row in fetch_recent(sqlite_path, 10)], ["recent"]
             )
 
+    def test_archive_and_reset_copies_history_then_empties_live_database(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            sqlite_path = os.path.join(directory, "readings.sqlite")
+            writer = StorageWriter(sqlite_path, os.path.join(directory, "raw.jsonl"))
+            try:
+                writer.submit_measurement(
+                    Measurement(now_iso(), "keep", 1, 35, 340, 202)
+                )
+                deadline = time.monotonic() + 3
+                while (
+                    time.monotonic() < deadline
+                    and writer.snapshot()["stored_measurements"] < 1
+                ):
+                    time.sleep(0.05)
+                self.assertGreaterEqual(writer.snapshot()["stored_measurements"], 1)
+                with self.assertRaises(StorageError):
+                    writer.archive_and_reset("no")
+                self.assertEqual(fetch_summary(sqlite_path)["count"], 1)
+                result = writer.archive_and_reset("vaciar")
+                archive = Path(result["path"])
+                self.assertEqual(archive.suffix, ".zip")
+                self.assertTrue(archive.is_file())
+                self.assertEqual(result["archived_measurements"], 1)
+                with zipfile.ZipFile(archive) as bundle:
+                    self.assertEqual(
+                        set(bundle.namelist()),
+                        {"readings.sqlite", "readings.csv", "LEEME.txt"},
+                    )
+                    csv_text = bundle.read("readings.csv").decode("utf-8")
+                    self.assertIn("Fecha,Hora,Volts,mAmp,Frec", csv_text.replace(" ", ""))
+                    sqlite_copy = Path(directory) / "archived.sqlite"
+                    sqlite_copy.write_bytes(bundle.read("readings.sqlite"))
+                archived = sqlite3.connect(sqlite_copy)
+                try:
+                    columns = [
+                        row[1] for row in archived.execute("PRAGMA table_info(readings)")
+                    ]
+                    self.assertEqual(columns, ["Fecha", "Hora", "Volts", "mAmp", "Frec"])
+                    self.assertEqual(
+                        archived.execute("SELECT COUNT(*) FROM readings").fetchone()[0],
+                        1,
+                    )
+                    tables = [
+                        row[0]
+                        for row in archived.execute(
+                            "SELECT name FROM sqlite_master WHERE type='table'"
+                        )
+                    ]
+                    self.assertEqual(tables, ["readings"])
+                    self.assertEqual(
+                        archived.execute(
+                            "SELECT Volts, mAmp, Frec FROM readings"
+                        ).fetchone(),
+                        (35.0, 340.0, 202.0),
+                    )
+                finally:
+                    archived.close()
+                self.assertEqual(fetch_summary(sqlite_path)["count"], 0)
+                events = list(iter_events(sqlite_path))
+                self.assertEqual(events[-1]["event_type"], "DATABASE_ARCHIVED_AND_RESET")
+            finally:
+                writer.close()
+
+    def test_archive_and_reset_refuses_empty_database(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            sqlite_path = os.path.join(directory, "readings.sqlite")
+            writer = StorageWriter(sqlite_path, os.path.join(directory, "raw.jsonl"))
+            try:
+                with self.assertRaises(StorageError):
+                    writer.archive_and_reset("VACIAR")
+                self.assertFalse((Path(directory) / "archives").exists())
+            finally:
+                writer.close()
+
     def test_verified_backup_can_be_restored_and_exported(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             sqlite_path = os.path.join(directory, "readings.sqlite")
@@ -686,6 +761,19 @@ class StatusTests(unittest.TestCase):
         )
         self.assertEqual(datetime.fromisoformat(start).microsecond, 0)
         self.assertEqual(datetime.fromisoformat(end).microsecond, 999999)
+        date_start, date_end = parse_time_range(
+            {"from": ["2026-09-07"], "to": ["2026-09-10"]}
+        )
+        parsed_start = datetime.fromisoformat(date_start)
+        parsed_end = datetime.fromisoformat(date_end)
+        self.assertEqual(parsed_start.hour, 0)
+        self.assertEqual(parsed_start.minute, 0)
+        self.assertEqual(parsed_start.second, 0)
+        self.assertEqual(parsed_start.microsecond, 0)
+        self.assertEqual(parsed_end.hour, 23)
+        self.assertEqual(parsed_end.minute, 59)
+        self.assertEqual(parsed_end.second, 59)
+        self.assertEqual(parsed_end.microsecond, 999999)
         with self.assertRaisesRegex(ValueError, "before"):
             parse_time_range(
                 {"from": ["2026-08-21T13:00:00"], "to": ["2026-08-21T12:00:00"]}
@@ -775,6 +863,15 @@ class StatusTests(unittest.TestCase):
                     workbook = load_workbook(BytesIO(response.read()))
                 self.assertEqual(workbook["Raw Data"].max_row, 2)
                 self.assertEqual(workbook["Report"]["B4"].value, "Promedio cada 5 minutos")
+
+                with urllib.request.urlopen(
+                    f"{base}/api/export.daily.xlsx?{query}", timeout=3
+                ) as response:
+                    daily_body = response.read()
+                    daily_disposition = response.headers.get("Content-Disposition", "")
+                self.assertIn("Promedios diarios", daily_disposition)
+                daily_workbook = load_workbook(BytesIO(daily_body))
+                self.assertEqual(daily_workbook.sheetnames, ["Lecturas", "Resumen"])
 
                 invalid_chart_interval = urllib.parse.urlencode(
                     {"chart_interval_minutes": 2}
@@ -932,6 +1029,75 @@ class StatusTests(unittest.TestCase):
                 self.assertEqual(
                     saved["network"]["modbus"]["poll_interval_seconds"], 5
                 )
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+                writer.close()
+
+    def test_archive_and_wipe_api_requires_confirm_then_downloads_zip(self) -> None:
+        class FakeCollector:
+            def snapshot(self) -> dict:
+                return {"tcp_listener": "CLIENT_CONNECTED"}
+
+        with tempfile.TemporaryDirectory() as directory:
+            sqlite_path = os.path.join(directory, "readings.sqlite")
+            writer = StorageWriter(sqlite_path, os.path.join(directory, "raw.jsonl"))
+            server = DashboardServer(("127.0.0.1", 0), DashboardHandler)
+            server.cfg = {
+                "site_name": "test",
+                "device_name": "test",
+                "output_sqlite": sqlite_path,
+                "network": {
+                    "mode": "modbus_tcp_client",
+                    "tcp_host": "127.0.0.1",
+                    "tcp_port": 502,
+                    "connection_timeout_seconds": 3,
+                    "modbus": {"poll_interval_seconds": 5},
+                },
+                "factory": {},
+                "limits": {"confirmed": False},
+            }
+            server.config_path = os.path.join(directory, "config.factory.json")
+            server.collector = FakeCollector()
+            server.writer = writer
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                writer.submit_measurement(
+                    Measurement(now_iso(), "keep", 1, 35, 340, 202)
+                )
+                deadline = time.monotonic() + 3
+                while (
+                    time.monotonic() < deadline
+                    and writer.snapshot()["stored_measurements"] < 1
+                ):
+                    time.sleep(0.05)
+                base = f"http://127.0.0.1:{server.server_port}/api/archive-and-wipe"
+                denied = urllib.request.Request(
+                    base,
+                    data=json.dumps({"confirm": "no"}).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with self.assertRaises(urllib.error.HTTPError) as raised:
+                    urllib.request.urlopen(denied, timeout=5)
+                self.assertEqual(raised.exception.code, 400)
+                self.assertEqual(fetch_summary(sqlite_path)["count"], 1)
+                accepted = urllib.request.Request(
+                    base,
+                    data=json.dumps({"confirm": "VACIAR"}).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(accepted, timeout=15) as response:
+                    body = response.read()
+                    self.assertIn("zip", (response.headers.get("Content-Type") or "").lower())
+                self.assertTrue(body.startswith(b"PK"))
+                with zipfile.ZipFile(BytesIO(body)) as bundle:
+                    self.assertIn("readings.csv", bundle.namelist())
+                    self.assertIn("readings.sqlite", bundle.namelist())
+                self.assertEqual(fetch_summary(sqlite_path)["count"], 0)
             finally:
                 server.shutdown()
                 server.server_close()

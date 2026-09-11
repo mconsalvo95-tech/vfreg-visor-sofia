@@ -4,6 +4,9 @@ const PAUSE_THRESHOLDS = Object.freeze({
   frequencyMin: 0.1
 });
 const SUPPORT_EMAIL = "mconsalvo95@gmail.com";
+const CSV_DOWNLOAD_NAME = "Reporte de insensibilización.csv";
+const XLSX_DOWNLOAD_NAME = "Reporte de insensibilización + graficos.xlsx";
+const DAILY_XLSX_DOWNLOAD_NAME = "Promedios diarios de insensibilización.xlsx";
 
 const elements = {
   dashboardStatus: document.querySelector("#dashboard-status"),
@@ -50,6 +53,7 @@ const elements = {
   frequencySparkline: document.querySelector("#frequency-sparkline"),
   csvExport: document.querySelector("#csv-export"),
   xlsxExport: document.querySelector("#xlsx-export"),
+  dailyExport: document.querySelector("#daily-export"),
   reportDownload: document.querySelector("#report-download"),
   exportPeriod: document.querySelector("#export-period"),
   reportCount: document.querySelector("#report-count"),
@@ -68,6 +72,16 @@ const elements = {
   reportPreviewCurrent: document.querySelector("#report-preview-current"),
   reportPreviewFrequency: document.querySelector("#report-preview-frequency"),
   exportStatus: document.querySelector("#export-status"),
+  archiveWipeOpen: document.querySelector("#archive-wipe-open"),
+  archiveWipeStatus: document.querySelector("#archive-wipe-status"),
+  archiveWipeDialog: document.querySelector("#archive-wipe-dialog"),
+  archiveWipeStep1: document.querySelector("#archive-wipe-step-1"),
+  archiveWipeStep2: document.querySelector("#archive-wipe-step-2"),
+  archiveWipeCancel: document.querySelector("#archive-wipe-cancel"),
+  archiveWipeCancel2: document.querySelector("#archive-wipe-cancel-2"),
+  archiveWipeContinue: document.querySelector("#archive-wipe-continue"),
+  archiveWipeConfirm: document.querySelector("#archive-wipe-confirm"),
+  archiveWipeConfirmBtn: document.querySelector("#archive-wipe-confirm-btn"),
   samplingForm: document.querySelector("#sampling-form"),
   pollInterval: document.querySelector("#poll-interval"),
   samplingSave: document.querySelector("#sampling-save"),
@@ -823,26 +837,29 @@ function filterQuery() {
 
 function updateReportSummary() {
   const query = filterQuery();
-  const xlsx = reportFormat === "xlsx";
-  elements.reportDownload.href = `${xlsx ? "/api/export.xlsx" : "/api/export.csv"}${query}`;
-  elements.reportDownload.download = xlsx ? "vfreg-readings.xlsx" : "vfreg-readings.csv";
-  elements.reportDownload.textContent = xlsx ? "Descargar XLSX" : "Descargar CSV";
+  const intraDay = reportFormat === "xlsx";
+  const daily = reportFormat === "daily";
+  elements.reportDownload.href = `${daily ? "/api/export.daily.xlsx" : intraDay ? "/api/export.xlsx" : "/api/export.csv"}${query}`;
+  elements.reportDownload.download = daily ? DAILY_XLSX_DOWNLOAD_NAME : intraDay ? XLSX_DOWNLOAD_NAME : CSV_DOWNLOAD_NAME;
+  elements.reportDownload.textContent = reportFormat === "csv" ? "Descargar CSV" : "Descargar XLSX";
   elements.exportPeriod.textContent = activeRange.label;
   elements.activeRangeLabel.textContent = activeRange.label;
   elements.reportCount.textContent = currentRangeCount.toLocaleString("es-AR");
   elements.previewReadingCount.textContent = `${currentRangeCount.toLocaleString("es-AR")} filas del período seleccionado`;
-  elements.reportFormat.textContent = xlsx ? "Excel + gráficos" : "CSV sin procesar";
-  elements.chartIntervalStep.hidden = !xlsx;
-  elements.chartIntervalSummaryRow.hidden = !xlsx;
+  elements.reportFormat.textContent = daily ? "Promedios diarios" : intraDay ? "Excel + gráficos" : "CSV sin procesar";
+  elements.chartIntervalStep.hidden = !intraDay;
+  elements.chartIntervalSummaryRow.hidden = !intraDay;
   elements.chartIntervalSummary.textContent = chartExportInterval === "auto"
     ? "Automático"
     : `Cada ${chartExportInterval} min`;
-  elements.reportContent.textContent = xlsx ? "Raw Data + Reporte y gráficos" : "Fecha, Hora, Volts, mAmp y Frec";
+  elements.reportContent.textContent = daily
+    ? "Promedio, mínimo y máximo por día"
+    : intraDay ? "Raw Data + Reporte y gráficos" : "Fecha, Hora, Volts, mAmp y Frec";
   elements.reportSummaryTitle.textContent = activeRange.key === "workday"
     ? "Reporte de jornada actual"
     : activeRange.key === "history" ? "Reporte histórico completo" : "Reporte del período seleccionado";
-  elements.workbookPreview.hidden = !xlsx;
-  if (xlsx && currentView === "reports") window.requestAnimationFrame(renderWorkbookPreview);
+  elements.workbookPreview.hidden = !intraDay;
+  if (intraDay && currentView === "reports") window.requestAnimationFrame(renderWorkbookPreview);
 }
 
 function updateExportLinks() {
@@ -1105,7 +1122,7 @@ async function downloadXlsx(event) {
     const url = URL.createObjectURL(blob);
     const download = document.createElement("a");
     download.href = url;
-    download.download = "vfreg-readings.xlsx";
+    download.download = elements.reportDownload.download;
     document.body.appendChild(download);
     download.click();
     download.remove();
@@ -1119,6 +1136,87 @@ async function downloadXlsx(event) {
   } finally {
     elements.reportDownload.dataset.busy = "false";
     elements.reportDownload.removeAttribute("aria-disabled");
+  }
+}
+
+function setArchiveWipeStatus(message, isError = false) {
+  elements.archiveWipeStatus.dataset.error = isError ? "true" : "false";
+  elements.archiveWipeStatus.textContent = message;
+}
+
+function resetArchiveWipeDialog() {
+  elements.archiveWipeStep1.hidden = false;
+  elements.archiveWipeStep2.hidden = true;
+  elements.archiveWipeConfirm.value = "";
+  elements.archiveWipeConfirmBtn.disabled = true;
+  elements.archiveWipeConfirmBtn.removeAttribute("aria-disabled");
+}
+
+function closeArchiveWipeDialog() {
+  resetArchiveWipeDialog();
+  if (elements.archiveWipeDialog.open) elements.archiveWipeDialog.close();
+}
+
+function openArchiveWipeDialog() {
+  if (elements.archiveWipeOpen.dataset.busy === "true") return;
+  resetArchiveWipeDialog();
+  setArchiveWipeStatus("");
+  elements.archiveWipeDialog.showModal();
+  elements.archiveWipeContinue.focus();
+}
+
+function showArchiveWipeStep2() {
+  elements.archiveWipeStep1.hidden = true;
+  elements.archiveWipeStep2.hidden = false;
+  elements.archiveWipeConfirm.focus();
+}
+
+function syncArchiveWipeConfirm() {
+  const ready = elements.archiveWipeConfirm.value.trim().toUpperCase() === "VACIAR";
+  elements.archiveWipeConfirmBtn.disabled = !ready;
+}
+
+async function confirmArchiveAndWipe() {
+  if (elements.archiveWipeConfirm.value.trim().toUpperCase() !== "VACIAR") return;
+  if (elements.archiveWipeOpen.dataset.busy === "true") return;
+  elements.archiveWipeOpen.dataset.busy = "true";
+  elements.archiveWipeConfirmBtn.disabled = true;
+  elements.archiveWipeConfirmBtn.setAttribute("aria-disabled", "true");
+  elements.archiveWipeOpen.disabled = true;
+  setArchiveWipeStatus("Archivando y vaciando… no cierre esta ventana.");
+  closeArchiveWipeDialog();
+  try {
+    const response = await fetch("/api/archive-and-wipe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: "VACIAR" })
+    });
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({}));
+      throw new Error(result.error || `No se pudo archivar (HTTP ${response.status})`);
+    }
+    const blob = await response.blob();
+    const headerName = response.headers.get("Content-Disposition") || "";
+    const matched = /filename="([^"]+)"/.exec(headerName);
+    const filename = matched ? matched[1] : "vfreg-archive.zip";
+    const url = URL.createObjectURL(blob);
+    const download = document.createElement("a");
+    download.href = url;
+    download.download = filename;
+    document.body.appendChild(download);
+    download.click();
+    download.remove();
+    URL.revokeObjectURL(url);
+    setArchiveWipeStatus("ZIP descargado y historial vaciado. Abra readings.csv en Excel. Conserve el archivo. Las lecturas nuevas se siguen guardando.");
+    refresh();
+  } catch (error) {
+    setArchiveWipeStatus(
+      `${error.message} Si el historial se vació y no tiene el archivo, busque la carpeta archives junto a la base de datos.`,
+      true
+    );
+  } finally {
+    elements.archiveWipeOpen.dataset.busy = "false";
+    elements.archiveWipeOpen.disabled = false;
   }
 }
 
@@ -1150,14 +1248,43 @@ async function savePollingInterval(event) {
   }
 }
 
+function adjustReportDateInputs() {
+  if (reportFormat === "daily") {
+    elements.reportFrom.type = "date";
+    elements.reportTo.type = "date";
+    if (elements.reportFrom.value.length >= 10) {
+      elements.reportFrom.value = elements.reportFrom.value.slice(0, 10);
+    }
+    if (elements.reportTo.value.length >= 10) {
+      elements.reportTo.value = elements.reportTo.value.slice(0, 10);
+    }
+  } else {
+    elements.reportFrom.type = "datetime-local";
+    elements.reportTo.type = "datetime-local";
+    if (elements.reportFrom.value.length === 10) {
+      elements.reportFrom.value = `${elements.reportFrom.value}T00:00:00`;
+    }
+    if (elements.reportTo.value.length === 10) {
+      elements.reportTo.value = `${elements.reportTo.value}T23:59:59`;
+    }
+  }
+}
+
 function openCustomForm(form, fromElement, toElement) {
   const opening = form.hidden;
   form.hidden = !opening;
   if (!opening) return;
+  if (form === elements.reportCustomForm) adjustReportDateInputs();
   const range = resolvedRange();
   const now = new Date();
-  fromElement.value = range.from || localInputValue(new Date(now.getTime() - 15 * 60000));
-  toElement.value = range.to || localInputValue(now);
+  let fromValue = range.from || localInputValue(new Date(now.getTime() - 15 * 60000));
+  let toValue = range.to || localInputValue(now);
+  if (fromElement.type === "date") {
+    fromValue = fromValue.slice(0, 10);
+    toValue = toValue.slice(0, 10);
+  }
+  fromElement.value = fromValue;
+  toElement.value = toValue;
   fromElement.focus();
 }
 
@@ -1178,6 +1305,7 @@ function setReportFormat(format) {
     button.classList.toggle("is-selected", selected);
     button.setAttribute("aria-pressed", String(selected));
   });
+  adjustReportDateInputs();
   updateReportSummary();
 }
 
@@ -1216,15 +1344,31 @@ document.querySelectorAll("[data-go-reports]").forEach((button) => button.addEve
 }));
 elements.retryConnection.addEventListener("click", refresh);
 elements.reportDownload.addEventListener("click", (event) => {
-  if (reportFormat === "xlsx") downloadXlsx(event);
-  else {
+  if (reportFormat === "csv") {
     elements.exportStatus.dataset.error = "false";
     elements.exportStatus.textContent = "Descarga CSV iniciada";
     setSupportMailto(elements.exportStatus, false);
+  } else downloadXlsx(event);
+});
+elements.archiveWipeOpen.addEventListener("click", openArchiveWipeDialog);
+elements.archiveWipeCancel.addEventListener("click", closeArchiveWipeDialog);
+elements.archiveWipeCancel2.addEventListener("click", closeArchiveWipeDialog);
+elements.archiveWipeContinue.addEventListener("click", showArchiveWipeStep2);
+elements.archiveWipeConfirm.addEventListener("input", syncArchiveWipeConfirm);
+elements.archiveWipeConfirm.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    confirmArchiveAndWipe();
   }
+});
+elements.archiveWipeConfirmBtn.addEventListener("click", confirmArchiveAndWipe);
+elements.archiveWipeDialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  closeArchiveWipeDialog();
 });
 elements.csvExport.addEventListener("click", () => setReportFormat("csv"));
 elements.xlsxExport.addEventListener("click", () => setReportFormat("xlsx"));
+elements.dailyExport.addEventListener("click", () => setReportFormat("daily"));
 document.querySelectorAll("[data-chart-export-interval]").forEach((button) => {
   button.addEventListener("click", () => setChartExportInterval(button.dataset.chartExportInterval));
   button.addEventListener("keydown", moveChartExportIntervalFocus);

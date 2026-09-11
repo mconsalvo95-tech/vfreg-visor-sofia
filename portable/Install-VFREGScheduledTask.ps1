@@ -78,6 +78,15 @@ function Test-VFREGDeploymentLayout {
     }
 }
 
+function Unblock-VFREGDeploymentFiles {
+    param([string]$Root)
+
+    # ZIP downloads carry Mark of the Web. Task Scheduler at 05:50 cannot click
+    # through SmartScreen, so unblock the extracted files on this PC.
+    Get-ChildItem -LiteralPath $Root -Recurse -File -ErrorAction SilentlyContinue |
+        Unblock-File -ErrorAction SilentlyContinue
+}
+
 function Get-VFREGTaskArguments {
     param([string]$ConfigPath)
 
@@ -273,6 +282,7 @@ try {
         exit 0
     }
 
+    Unblock-VFREGDeploymentFiles -Root $layout.Root
     Install-VFREGScheduledTask -Name $TaskName -Definition $definition
     exit 0
 } catch {

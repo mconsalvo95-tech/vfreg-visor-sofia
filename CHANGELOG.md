@@ -7,6 +7,14 @@ release.
 
 ## Unreleased
 
+- Add **Promedios diarios** Excel export: sheet `Lecturas` matches the plant
+  spreadsheet (`Tabla` of Time/V/mA/Hz plus SUBTOTAL/Filtro), sheet `Resumen`
+  has precomputed daily averages and three centered Promedio charts with extra
+  Y-axis headroom so peak labels stay visible. Periods over 100k rows return 413.
+- Add archive-and-wipe: type `VACIAR` to back up SQLite then empty live readings.
+- Document SmartScreen / Mark of the Web: `Unblock-File` on the extracted ZIP,
+  and the 05:50 task installer unblocks files so scheduled start is not blocked.
+
 - Embed the Frigorífico Sofía plant logo (Alimentos Sofía S.A. wordmark) in
   the dashboard header and the XLSX Report header box `H1:L4` without cropping
   it to row 1. Charts remain native Excel LineCharts. The Report sheet title is

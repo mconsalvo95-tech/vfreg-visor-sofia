@@ -542,6 +542,12 @@ class ScheduledTaskScriptTests(unittest.TestCase):
         self.assertIn("[switch]$NoLogonTrigger", source)
         self.assertIn("VFREG-VISOR-SOFIA.exe", source)
         self.assertIn("config.factory.json", source)
+        self.assertIn("Unblock-VFREGDeploymentFiles", source)
+        self.assertIn("Unblock-File", source)
+        self.assertLess(
+            source.find("Unblock-VFREGDeploymentFiles -Root"),
+            source.find("Install-VFREGScheduledTask -Name"),
+        )
 
     def test_validate_only_reports_portable_paths_and_quoting(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -717,6 +723,7 @@ class StartBatTests(unittest.TestCase):
         self.assertIn("Start VFREG Visor.bat", runbook)
         self.assertIn("Probar despertar VFREG.bat", runbook)
         self.assertIn("05:50", runbook)
+        self.assertIn("Unblock-File", runbook)
         self.assertRegex(runbook, r"(?i)PC personal|personal o de prueba")
 
 

@@ -10,6 +10,7 @@ import sqlite3
 import sys
 import threading
 import time
+import zipfile
 from contextlib import closing, contextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
@@ -22,6 +23,9 @@ LOGGER = logging.getLogger("vfreg.storage")
 
 class StorageError(RuntimeError):
     """Raised when the authoritative SQLite history is unusable."""
+
+
+ARCHIVE_CONFIRM_PHRASE = "VACIAR"
 
 
 @dataclass
@@ -284,6 +288,97 @@ def create_sqlite_backup(
     return str(destination)
 
 
+def create_sqlite_archive(source_path: str | Path, destination: str | Path) -> str:
+    """Verified online backup to an exact path. Does not prune other files."""
+    source = Path(source_path).resolve()
+    target = Path(destination).resolve()
+    init_sqlite(str(source))
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_suffix(target.suffix + ".tmp")
+    temporary.unlink(missing_ok=True)
+    try:
+        with closing(connect_sqlite(str(source))) as source_con:
+            with closing(sqlite3.connect(str(temporary), timeout=10)) as backup_con:
+                source_con.backup(backup_con)
+        valid, detail = verify_sqlite_integrity(temporary)
+        if not valid:
+            raise StorageError(f"Archive failed integrity verification: {detail}")
+        os.replace(temporary, target)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return str(target)
+
+
+ARCHIVE_README = (
+    "VFREG Visor — archivo histórico\r\n"
+    "\r\n"
+    "Abra readings.csv en Excel o readings.sqlite en un visor de bases.\r\n"
+    "Ambos tienen las mismas columnas: Fecha, Hora, Volts, mAmp, Frec.\r\n"
+    "Excel admite como máximo 1.048.576 filas. Si el CSV es más grande, use el .sqlite u otro programa.\r\n"
+)
+
+
+def create_manager_sqlite(source_path: str | Path, destination: str | Path) -> str:
+    """Write an operator SQLite file with the same columns as the CSV export."""
+    source = Path(source_path).resolve()
+    target = Path(destination).resolve()
+    headings = [heading for heading, _field in MANAGER_EXPORT_COLUMNS]
+    column_sql = ", ".join(
+        f'"{heading}" TEXT NOT NULL' if heading in {"Fecha", "Hora"} else f'"{heading}" REAL'
+        for heading in headings
+    )
+    quoted = ", ".join(f'"{heading}"' for heading in headings)
+    placeholders = ", ".join("?" for _ in headings)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_suffix(target.suffix + ".tmp")
+    temporary.unlink(missing_ok=True)
+    try:
+        with closing(sqlite3.connect(str(temporary), timeout=10)) as con:
+            con.execute(f"CREATE TABLE readings ({column_sql})")
+            con.executemany(
+                f"INSERT INTO readings ({quoted}) VALUES ({placeholders})",
+                (manager_export_values(row) for row in iter_measurements(str(source))),
+            )
+            con.commit()
+            count = int(con.execute("SELECT COUNT(*) FROM readings").fetchone()[0])
+        if count <= 0:
+            raise StorageError("La copia archivada está vacía; no se vació la base.")
+        os.replace(temporary, target)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return str(target)
+
+
+def package_history_archive(sqlite_path: str | Path, zip_path: str | Path) -> str:
+    """Zip a manager SQLite copy with a CSV operators can open in Excel."""
+    source = Path(sqlite_path).resolve()
+    destination = Path(zip_path).resolve()
+    csv_path = destination.with_suffix(".csv")
+    slim_sqlite = destination.with_name(destination.stem + "-manager.sqlite")
+    readme_path = destination.with_name(destination.stem + "-LEEME.txt")
+    export_csv(str(source), str(csv_path))
+    create_manager_sqlite(source, slim_sqlite)
+    readme_path.write_text(ARCHIVE_README, encoding="utf-8")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_suffix(".zip.tmp")
+    temporary.unlink(missing_ok=True)
+    try:
+        with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.write(slim_sqlite, "readings.sqlite")
+            archive.write(csv_path, "readings.csv")
+            archive.write(readme_path, "LEEME.txt")
+            if archive.testzip() is not None:
+                raise StorageError("Archive ZIP failed integrity verification")
+        os.replace(temporary, destination)
+        source.unlink(missing_ok=True)
+    finally:
+        temporary.unlink(missing_ok=True)
+        csv_path.unlink(missing_ok=True)
+        slim_sqlite.unlink(missing_ok=True)
+        readme_path.unlink(missing_ok=True)
+    return str(destination)
+
+
 def _delete_expired(
     con: sqlite3.Connection,
     measurement_retention_days: int,
@@ -379,6 +474,14 @@ def append_csv(path: str, row: Measurement) -> None:
         writer.writerow(asdict(row))
 
 
+class _ArchiveRequest:
+    def __init__(self, destination: Path) -> None:
+        self.destination = destination
+        self.done = threading.Event()
+        self.error: BaseException | None = None
+        self.result: dict[str, Any] | None = None
+
+
 class StorageWriter:
     def __init__(
         self,
@@ -418,6 +521,7 @@ class StorageWriter:
         self._queue: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=queue_size)
         self._stop = threading.Event()
         self._lock = threading.Lock()
+        self._pending_archive: _ArchiveRequest | None = None
         self._next_maintenance = 0.0
         self._storage_failure_active = False
         self._stats: dict[str, Any] = {
@@ -460,6 +564,36 @@ class StorageWriter:
 
     def submit_raw(self, envelope: dict[str, Any]) -> None:
         self._enqueue("raw", envelope)
+
+    def archive_and_reset(self, confirm: str, timeout: float = 180) -> dict[str, Any]:
+        """Copy the live database, then delete stored history after confirmation."""
+        if str(confirm).strip().upper() != ARCHIVE_CONFIRM_PHRASE:
+            raise StorageError("Escriba VACIAR para confirmar.")
+        timestamp = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
+        archive_root = Path(self.runtime_root) / "archives"
+        destination = archive_root / f"vfreg-archive-{timestamp}.zip"
+        suffix = 1
+        while destination.exists():
+            destination = archive_root / f"vfreg-archive-{timestamp}-{suffix}.zip"
+            suffix += 1
+        if self._closed or not self._thread.is_alive():
+            with closing(connect_sqlite(self.sqlite_path)) as con:
+                return self._archive_and_reset_on(con, destination)
+        request = _ArchiveRequest(destination)
+        with self._lock:
+            if self._pending_archive is not None:
+                raise StorageError("Ya hay un archivado en curso.")
+            self._pending_archive = request
+        if not request.done.wait(timeout):
+            with self._lock:
+                if self._pending_archive is request:
+                    self._pending_archive = None
+            raise StorageError("El archivado no terminó a tiempo. No se vació la base.")
+        if request.error is not None:
+            raise StorageError(str(request.error)) from request.error
+        if request.result is None:
+            raise StorageError("El archivado no devolvió un archivo.")
+        return request.result
 
     def submit_event(
         self,
@@ -747,9 +881,134 @@ class StorageWriter:
                 os.replace(source, f"{self.raw_journal_path}.{number + 1}")
         os.replace(self.raw_journal_path, self.raw_journal_path + ".1")
 
+    def _archive_and_reset_on(
+        self, con: sqlite3.Connection, destination: Path
+    ) -> dict[str, Any]:
+        count = int(con.execute("SELECT COUNT(*) FROM measurements").fetchone()[0])
+        if count <= 0:
+            raise StorageError("No hay lecturas guardadas para archivar.")
+        sqlite_copy = destination.with_suffix(".sqlite")
+        archive_sqlite = Path(create_sqlite_archive(self.sqlite_path, sqlite_copy))
+        archived = fetch_summary(str(archive_sqlite))["count"]
+        if archived <= 0:
+            raise StorageError("La copia archivada está vacía; no se vació la base.")
+        zip_path = package_history_archive(archive_sqlite, destination)
+        con.execute("DELETE FROM measurements")
+        con.execute("DELETE FROM collector_events")
+        con.commit()
+        con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        vacuum_error = ""
+        for _attempt in range(5):
+            try:
+                con.execute("VACUUM")
+                vacuum_error = ""
+                break
+            except sqlite3.Error as error:
+                vacuum_error = str(error)
+                time.sleep(0.2)
+        event = {
+            "timestamp": now_iso(),
+            "event_type": "DATABASE_ARCHIVED_AND_RESET",
+            "severity": "WARN",
+            "source": "dashboard",
+            "details": (
+                f"archived_measurements={archived}; path={zip_path}"
+                + (f"; vacuum={vacuum_error}" if vacuum_error else "")
+            ),
+        }
+        insert_events(con, [event])
+        con.commit()
+        LOGGER.warning("Database archived and reset: %s rows -> %s", archived, zip_path)
+        return {
+            "path": zip_path,
+            "filename": Path(zip_path).name,
+            "archived_measurements": int(archived),
+        }
+
+    def _flush_queue(self, con: sqlite3.Connection) -> None:
+        items: list[tuple[str, Any]] = []
+        while True:
+            try:
+                items.append(self._queue.get_nowait())
+            except queue.Empty:
+                break
+        if items:
+            self._commit_items(con, items)
+
+    def _maybe_archive_and_reset(self, con: sqlite3.Connection) -> None:
+        with self._lock:
+            request = self._pending_archive
+        if request is None:
+            return
+        try:
+            self._flush_queue(con)
+            request.result = self._archive_and_reset_on(con, request.destination)
+        except Exception as error:
+            request.error = error
+        finally:
+            with self._lock:
+                if self._pending_archive is request:
+                    self._pending_archive = None
+            request.done.set()
+
+    def _commit_items(
+        self, con: sqlite3.Connection, items: list[tuple[str, Any]]
+    ) -> None:
+        measurements = [item for kind, item in items if kind == "measurement"]
+        events = [item for kind, item in items if kind == "event"]
+        raw_packets = [item for kind, item in items if kind == "raw"]
+        failure_was_active = self._storage_failure_active
+        raw_succeeded = True
+        try:
+            if raw_packets:
+                self._rotate_raw_journal()
+                with open(self.raw_journal_path, "a", encoding="utf-8") as handle:
+                    for envelope in raw_packets:
+                        handle.write(json.dumps(envelope, separators=(",", ":")) + "\n")
+                    handle.flush()
+        except OSError as error:
+            raw_succeeded = False
+            with self._lock:
+                self._stats["dropped_raw_packets"] += len(raw_packets)
+            self._record_error(error)
+        try:
+            insert_measurements(con, measurements)
+            insert_events(con, events)
+            con.commit()
+            if failure_was_active and raw_succeeded:
+                recovered = {
+                    "timestamp": now_iso(),
+                    "event_type": "STORAGE_RECOVERED",
+                    "severity": "INFO",
+                    "source": "storage",
+                    "details": "Storage writes resumed after an error",
+                }
+                insert_events(con, [recovered])
+                con.commit()
+                self._storage_failure_active = False
+                LOGGER.info("Storage writes recovered")
+            with self._lock:
+                self._stats["stored_measurements"] += len(measurements)
+                self._stats["stored_events"] += len(events)
+        except sqlite3.Error as error:
+            con.rollback()
+            with self._lock:
+                self._stats["dropped_measurements"] += len(measurements)
+                self._stats["dropped_events"] += len(events)
+            self._record_error(error)
+        finally:
+            if raw_succeeded:
+                with self._lock:
+                    self._stats["raw_packets"] += len(raw_packets)
+            for _item in items:
+                self._queue.task_done()
+
     def _run(self) -> None:
         with closing(connect_sqlite(self.sqlite_path)) as con:
             while not self._stop.is_set() or not self._queue.empty():
+                self._maybe_archive_and_reset(con)
+                if self._stop.is_set() and self._queue.empty():
+                    break
                 items: list[tuple[str, Any]] = []
                 try:
                     items.append(self._queue.get(timeout=0.25))
@@ -761,55 +1020,7 @@ class StorageWriter:
                         items.append(self._queue.get_nowait())
                     except queue.Empty:
                         break
-
-                measurements = [item for kind, item in items if kind == "measurement"]
-                events = [item for kind, item in items if kind == "event"]
-                raw_packets = [item for kind, item in items if kind == "raw"]
-                failure_was_active = self._storage_failure_active
-                raw_succeeded = True
-                try:
-                    if raw_packets:
-                        self._rotate_raw_journal()
-                        with open(self.raw_journal_path, "a", encoding="utf-8") as handle:
-                            for envelope in raw_packets:
-                                handle.write(json.dumps(envelope, separators=(",", ":")) + "\n")
-                            handle.flush()
-                except OSError as error:
-                    raw_succeeded = False
-                    with self._lock:
-                        self._stats["dropped_raw_packets"] += len(raw_packets)
-                    self._record_error(error)
-                try:
-                    insert_measurements(con, measurements)
-                    insert_events(con, events)
-                    con.commit()
-                    if failure_was_active and raw_succeeded:
-                        recovered = {
-                            "timestamp": now_iso(),
-                            "event_type": "STORAGE_RECOVERED",
-                            "severity": "INFO",
-                            "source": "storage",
-                            "details": "Storage writes resumed after an error",
-                        }
-                        insert_events(con, [recovered])
-                        con.commit()
-                        self._storage_failure_active = False
-                        LOGGER.info("Storage writes recovered")
-                    with self._lock:
-                        self._stats["stored_measurements"] += len(measurements)
-                        self._stats["stored_events"] += len(events)
-                except sqlite3.Error as error:
-                    con.rollback()
-                    with self._lock:
-                        self._stats["dropped_measurements"] += len(measurements)
-                        self._stats["dropped_events"] += len(events)
-                    self._record_error(error)
-                finally:
-                    if raw_succeeded:
-                        with self._lock:
-                            self._stats["raw_packets"] += len(raw_packets)
-                    for _item in items:
-                        self._queue.task_done()
+                self._commit_items(con, items)
                 self._run_maintenance(con)
 
 
