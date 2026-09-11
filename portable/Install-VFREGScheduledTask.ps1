@@ -7,6 +7,7 @@ param(
     [string]$ConfigName = "config.factory.json",
     [string]$DailyStartTime = "05:50",
     [string]$RunAsUser = "",
+    [switch]$NoLogonTrigger,
     [switch]$Remove,
     [switch]$ValidateOnly
 )
@@ -14,6 +15,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $Script:DailyStartTime = $DailyStartTime
+$Script:NoLogonTrigger = [bool]$NoLogonTrigger
 $Script:RestartCount = 3
 $Script:RestartIntervalMinutes = 1
 $Script:MultipleInstancesPolicy = "IgnoreNew"
@@ -104,9 +106,13 @@ function New-VFREGScheduledTaskDefinition {
         $dailyTrigger.WakeToRun = $true
     }
 
-    $logonTrigger = New-ScheduledTaskTrigger -AtLogOn -User $AccountName
-    if ($logonTrigger.PSObject.Properties.Match("StartWhenAvailable").Count -gt 0) {
-        $logonTrigger.StartWhenAvailable = $true
+    $triggers = @($dailyTrigger)
+    if (-not $Script:NoLogonTrigger) {
+        $logonTrigger = New-ScheduledTaskTrigger -AtLogOn -User $AccountName
+        if ($logonTrigger.PSObject.Properties.Match("StartWhenAvailable").Count -gt 0) {
+            $logonTrigger.StartWhenAvailable = $true
+        }
+        $triggers += $logonTrigger
     }
 
     $settings = New-ScheduledTaskSettingsSet `
@@ -126,7 +132,7 @@ function New-VFREGScheduledTaskDefinition {
 
     $task = New-ScheduledTask `
         -Action $action `
-        -Trigger @($dailyTrigger, $logonTrigger) `
+        -Trigger $triggers `
         -Settings $settings `
         -Principal $principal `
         -Description $Description
@@ -134,7 +140,7 @@ function New-VFREGScheduledTaskDefinition {
     return [PSCustomObject]@{
         Task = $task
         Action = $action
-        Triggers = @($dailyTrigger, $logonTrigger)
+        Triggers = $triggers
         Settings = $settings
         Principal = $principal
         Arguments = $Arguments
@@ -158,7 +164,7 @@ function Write-VFREGTaskValidationReport {
         arguments = $Definition.Arguments
         account = $Definition.AccountName
         daily_start = $Script:DailyStartTime
-        logon_trigger = $true
+        logon_trigger = -not $Script:NoLogonTrigger
         start_when_available = $true
         wake_to_run = $true
         multiple_instances = $Script:MultipleInstancesPolicy

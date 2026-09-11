@@ -67,6 +67,7 @@ class Phase6BDashboardTests(unittest.TestCase):
             "xlsx-export",
             "history-chart",
             "app-version",
+            "last-reading",
         ):
             self.assertIn(f'id="{element_id}"', html)
 
@@ -92,12 +93,23 @@ class Phase6BDashboardTests(unittest.TestCase):
 
         self.assertIn("Sistema de monitoreo", html)
         self.assertIn("Frigorífico SOFIA", html)
+        self.assertIn('src="/sofia-logo.png"', html)
+        self.assertNotIn("logo-placeholder", html)
+        self.assertNotIn(">LOGO<", html)
         self.assertNotIn('id="site-name"', html)
         self.assertNotIn('id="device-name"', html)
         self.assertNotIn("Chicken processing", html)
         self.assertNotIn("VFREG-SIM", html)
         self.assertIn("<title>VFREG · SOFIA</title>", html)
-        self.assertIn(">Soporte</a>", html)
+        self.assertIn("Consulta o dudas: +543884880227", html)
+        self.assertIn("tel:+543884880227", html)
+        self.assertIn("https://mail.google.com/mail/", html)
+        self.assertIn("mconsalvo95@gmail.com", html)
+        self.assertIn("Enviar correo a soporte", html)
+        self.assertIn('id="banner-copy"', html)
+        self.assertNotIn("mailto:", html)
+        self.assertIn('id="last-reading"', html)
+        self.assertNotIn("github.com", html)
         self.assertRegex(html, r"<footer>.*VFREG · SOFIA.*Monitor local de solo lectura", re.DOTALL)
         self.assertNotIn("siteName", javascript)
         self.assertNotIn("deviceName", javascript)
@@ -108,6 +120,8 @@ class Phase6BDashboardTests(unittest.TestCase):
         styles = (DASHBOARD_ROOT / "styles.css").read_text(encoding="utf-8")
         buttons = re.findall(r"<button\b([^>]*)>(.*?)</button>", html, flags=re.DOTALL)
 
+        self.assertIn(".brand-logo", styles)
+        self.assertNotIn(".logo-placeholder", styles)
         self.assertTrue(buttons)
         for attributes, contents in buttons:
             self.assertRegex(attributes, r'\btype="(?:button|submit)"')

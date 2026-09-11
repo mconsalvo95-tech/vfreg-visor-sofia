@@ -49,6 +49,9 @@ Para inicio automatico diario (05:50) y al iniciar sesion del operador dedicado,
 ver "GUIA-OPERADOR-INICIO-AUTOMATICO.txt" y el script
 "Install-VFREGScheduledTask.ps1".
 
+Para probar el despertar a una hora cercana, sin esperar a las 05:50 ni cambiar
+esa tarea de produccion, usar "Probar despertar VFREG.bat".
+
 O desde PowerShell abierto dentro de esta carpeta:
 
   & ".\VFREG-VISOR-SOFIA.exe" --config ".\config.factory.json"

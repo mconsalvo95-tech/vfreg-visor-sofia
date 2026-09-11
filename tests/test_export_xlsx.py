@@ -116,6 +116,7 @@ class XlsxExportTests(unittest.TestCase):
                     and cell_range.min_col <= 6
                 )
             )
+            self.assertEqual(report["A1"].value, "Reporte de insensibilización")
             self.assertEqual(report["A2"].value, "Fechas")
             self.assertEqual(report["E2"].value, "Página")
             self.assertEqual(report["A4"].value, "Intervalo")
@@ -165,11 +166,41 @@ class XlsxExportTests(unittest.TestCase):
                     for name in archive_names
                     if name.startswith("xl/charts/chart") and name.endswith(".xml")
                 ]
+                drawing_xml = [
+                    archive.read(name).decode("utf-8")
+                    for name in archive_names
+                    if name.startswith("xl/drawings/drawing") and name.endswith(".xml")
+                ]
             for payload in xml_parts:
                 ET.fromstring(payload)
             self.assertEqual(len(chart_xml), 3)
+            logo_anchor = re.search(
+                r'<xdr:twoCellAnchor([^>]*)>.*?<xdr:from>.*?<xdr:col>(\d+)</xdr:col>'
+                r'.*?<xdr:colOff>(\d+)</xdr:colOff>.*?</xdr:from>'
+                r'.*?<xdr:to>.*?<xdr:col>(\d+)</xdr:col>.*?<xdr:row>(\d+)</xdr:row>'
+                r'.*?</xdr:to>.*?sofia-logo',
+                "".join(drawing_xml),
+                re.DOTALL,
+            )
+            self.assertIsNotNone(logo_anchor)
+            self.assertIn('editAs="oneCell"', logo_anchor.group(1))
+            self.assertEqual(logo_anchor.group(2), "7")
+            self.assertGreater(int(logo_anchor.group(3)), 300000)
+            self.assertLessEqual(int(logo_anchor.group(4)), 11)
+            self.assertLessEqual(int(logo_anchor.group(5)), 3)
             self.assertFalse(any(name.startswith("xl/externalLinks/") for name in archive_names))
-            self.assertFalse(any(name.lower().endswith(".png") for name in archive_names))
+            self.assertTrue(
+                any(
+                    name.startswith("xl/media/") and name.lower().endswith(".png")
+                    for name in archive_names
+                )
+            )
+            self.assertFalse(
+                any(
+                    name.startswith("xl/charts/") and name.lower().endswith(".png")
+                    for name in archive_names
+                )
+            )
             for xml, value_column, helper_columns, unit in zip(
                 chart_xml,
                 ("C", "D", "E"),

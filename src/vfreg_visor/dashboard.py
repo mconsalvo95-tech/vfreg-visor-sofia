@@ -27,6 +27,7 @@ from .storage import (
     fetch_sampled_interval,
     fetch_summary,
 )
+from .xlsx_report import _company_logo_path
 
 
 if getattr(sys, "frozen", False):
@@ -434,6 +435,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 "vfreg-readings.xlsx",
                 delete_after=True,
             )
+            return
+
+        if parsed.path == "/sofia-logo.png":
+            logo = _company_logo_path()
+            if logo is None:
+                self.send_not_found()
+                return
+            self.send_bytes(logo.read_bytes(), "image/png")
             return
 
         static_files = {

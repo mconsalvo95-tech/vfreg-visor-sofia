@@ -3,6 +3,7 @@ const PAUSE_THRESHOLDS = Object.freeze({
   currentMax: 1,
   frequencyMin: 0.1
 });
+const SUPPORT_EMAIL = "mconsalvo95@gmail.com";
 
 const elements = {
   dashboardStatus: document.querySelector("#dashboard-status"),
@@ -28,16 +29,17 @@ const elements = {
   processDetail: document.querySelector("#process-detail"),
   systemBanner: document.querySelector("#system-banner"),
   bannerIcon: document.querySelector("#banner-icon"),
+  bannerCopy: document.querySelector("#banner-copy"),
   bannerTitle: document.querySelector("#banner-title"),
   bannerMessage: document.querySelector("#banner-message"),
   retryConnection: document.querySelector("#retry-connection"),
+  supportEmail: document.querySelector("#support-email"),
   recordsBody: document.querySelector("#records-body"),
   recordCount: document.querySelector("#record-count"),
   recordCountLabel: document.querySelector("#record-count-label"),
   historyMode: document.querySelector("#history-mode"),
-  networkEndpoint: document.querySelector("#network-endpoint"),
-  storageHealth: document.querySelector("#storage-health"),
   appVersion: document.querySelector("#app-version"),
+  lastReading: document.querySelector("#last-reading"),
   emptyChart: document.querySelector("#empty-chart"),
   canvas: document.querySelector("#history-chart"),
   chartTooltip: document.querySelector("#chart-tooltip"),
@@ -122,6 +124,50 @@ function number(value, digits = 1) {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits
   });
+}
+
+function supportComposeHref(subject, detail) {
+  const version = (elements.appVersion?.textContent || "").trim();
+  const lastReading = (elements.lastReading?.textContent || "").trim();
+  const body = [
+    "Describa qué estaba haciendo cuando apareció el problema.",
+    "",
+    "---",
+    `Asunto: ${subject}`,
+    `Detalle: ${detail}`,
+    version,
+    lastReading
+  ].filter(Boolean).join("\n");
+  const query = new URLSearchParams({
+    view: "cm",
+    fs: "1",
+    to: SUPPORT_EMAIL,
+    su: subject,
+    body
+  });
+  return `https://mail.google.com/mail/?${query.toString()}`;
+}
+
+function setSupportMailto(element, enabled, subject, detail) {
+  if (!element) return;
+  if (enabled) {
+    element.setAttribute("href", supportComposeHref(subject, detail));
+    element.setAttribute("target", "_blank");
+    element.setAttribute("rel", "noopener noreferrer");
+  } else {
+    element.removeAttribute("href");
+    element.removeAttribute("target");
+    element.removeAttribute("rel");
+  }
+}
+
+function updateSupportEmailLink() {
+  setSupportMailto(
+    elements.supportEmail,
+    true,
+    "Soporte VFREG Visor",
+    "Consulta o duda desde el dashboard."
+  );
 }
 
 function timestampParts(value) {
@@ -269,6 +315,13 @@ function setBanner(state, title, message, icon, showRetry = false) {
   elements.bannerIcon.textContent = icon;
   elements.bannerIcon.dataset.icon = icon === "⏸" ? "pause" : "";
   elements.retryConnection.hidden = !showRetry;
+  if (state === "danger") {
+    setSupportMailto(elements.bannerCopy, true, `VFREG Visor — ${title}`, message);
+    elements.bannerCopy.setAttribute("aria-label", `Escribir a soporte: ${title}`);
+  } else {
+    setSupportMailto(elements.bannerCopy, false);
+    elements.bannerCopy.removeAttribute("aria-label");
+  }
 }
 
 function updateSystemBanner(data, mode) {
@@ -303,6 +356,8 @@ function updateSystemBanner(data, mode) {
     return;
   }
   elements.systemBanner.classList.add("is-hidden");
+  setSupportMailto(elements.bannerCopy, false);
+  elements.bannerCopy.removeAttribute("aria-label");
 }
 
 function updateConnectionAndProcess(data, mode) {
@@ -406,14 +461,6 @@ function renderStatus(data) {
   const latest = data.latest;
   const mode = processMode(data);
   elements.appVersion.textContent = `VFREG Visor ${data.app_version}`;
-  elements.networkEndpoint.textContent = data.network.mode === "modbus_tcp_client"
-    ? `Conexión: ${data.network.tcp_host}:${data.network.tcp_port}`
-    : `Puerto de escucha: ${data.network.tcp_port}`;
-
-  const storage = data.diagnostics?.storage || {};
-  const storageState = String(storage.storage_health || "STARTING").toUpperCase();
-  const storageLabels = { HEALTHY: "saludable", WARNING: "advertencia", CRITICAL: "crítico", STARTING: "iniciando" };
-  elements.storageHealth.textContent = `Almacenamiento: ${storageLabels[storageState] || storageState.toLowerCase()}`;
 
   const pollInterval = Number(data.network.poll_interval_seconds);
   if (Number.isFinite(pollInterval) && document.activeElement !== elements.pollInterval) {
@@ -425,10 +472,13 @@ function renderStatus(data) {
     const timestamp = timestampParts(latest.timestamp);
     elements.readingTime.textContent = timestamp.time;
     elements.readingDate.textContent = timestamp.date;
+    elements.lastReading.textContent = `Última lectura: ${timestamp.time}`;
   } else {
     elements.readingTime.textContent = "--:--:--";
     elements.readingDate.textContent = "Sin lecturas";
+    elements.lastReading.textContent = "Última lectura: ninguna";
   }
+  updateSupportEmailLink();
 
   updateConnectionAndProcess(data, mode);
   updateMetrics(data, mode);
@@ -816,10 +866,11 @@ function selectPresetButton() {
   });
 }
 
-function setRangeStatus(message, error = false) {
+function setRangeStatus(message, error = false, offerSupport = false) {
   [elements.historyFilterResult].forEach((element) => {
     element.dataset.error = String(error);
     element.textContent = message;
+    setSupportMailto(element, error && offerSupport, "Soporte VFREG Visor — Historial", message);
   });
 }
 
@@ -848,7 +899,7 @@ async function loadActiveRange({ announce = true } = {}) {
       : `${Number(result.count || 0).toLocaleString("es-AR")} lecturas en ${rangeLabel.toLowerCase()}`);
   } catch (error) {
     if (requestId !== rangeRequestId) return;
-    setRangeStatus(error.message, true);
+    setRangeStatus(error.message, true, true);
   }
 }
 
@@ -896,10 +947,11 @@ function selectHistoryControls() {
   });
 }
 
-function setHistoryStatus(message, error = false) {
+function setHistoryStatus(message, error = false, offerSupport = false) {
   [elements.historyViewFilterResult, elements.historyRangeResult].forEach((element) => {
     element.dataset.error = String(error);
     element.textContent = message;
+    setSupportMailto(element, error && offerSupport, "Soporte VFREG Visor — Historial", message);
   });
 }
 
@@ -934,7 +986,7 @@ async function loadHistorySamples({ announce = true } = {}) {
     );
   } catch (error) {
     if (requestId !== historyRequestId) return;
-    setHistoryStatus(error.message, true);
+    setHistoryStatus(error.message, true, true);
   } finally {
     if (requestId === historyRequestId) {
       elements.recordsSection.dataset.loading = "false";
@@ -1007,15 +1059,18 @@ function applyCustomRange(from, to, resultElement) {
   if (!from || !to) {
     resultElement.dataset.error = "true";
     resultElement.textContent = "Complete Desde y Hasta para aplicar el período";
+    setSupportMailto(resultElement, false);
     return;
   }
   if (new Date(from) > new Date(to)) {
     resultElement.dataset.error = "true";
     resultElement.textContent = "La fecha Desde debe ser anterior a Hasta";
+    setSupportMailto(resultElement, false);
     return;
   }
   resultElement.dataset.error = "false";
   resultElement.textContent = "Período aplicado";
+  setSupportMailto(resultElement, false);
   activeRange = { key: "custom", from, to, label: "Período personalizado", rolling: false };
   selectPresetButton();
   loadActiveRange();
@@ -1039,6 +1094,7 @@ async function downloadXlsx(event) {
   elements.reportDownload.setAttribute("aria-disabled", "true");
   elements.exportStatus.dataset.error = "false";
   elements.exportStatus.textContent = "Preparando archivo Excel…";
+  setSupportMailto(elements.exportStatus, false);
   try {
     const response = await fetch(elements.reportDownload.href, { cache: "no-store" });
     if (!response.ok) {
@@ -1055,9 +1111,11 @@ async function downloadXlsx(event) {
     download.remove();
     URL.revokeObjectURL(url);
     elements.exportStatus.textContent = "Excel descargado correctamente";
+    setSupportMailto(elements.exportStatus, false);
   } catch (error) {
     elements.exportStatus.dataset.error = "true";
     elements.exportStatus.textContent = error.message;
+    setSupportMailto(elements.exportStatus, true, "Soporte VFREG Visor — Excel", error.message);
   } finally {
     elements.reportDownload.dataset.busy = "false";
     elements.reportDownload.removeAttribute("aria-disabled");
@@ -1070,6 +1128,7 @@ async function savePollingInterval(event) {
   elements.samplingSave.disabled = true;
   elements.samplingResult.dataset.error = "false";
   elements.samplingResult.textContent = "Aplicando…";
+  setSupportMailto(elements.samplingResult, false);
   try {
     const response = await fetch("/api/poll-interval", {
       method: "POST",
@@ -1081,9 +1140,11 @@ async function savePollingInterval(event) {
     elements.pollInterval.value = String(result.poll_interval_seconds);
     updateSamplingEstimate(result.poll_interval_seconds);
     elements.samplingResult.textContent = "Guardado y activo";
+    setSupportMailto(elements.samplingResult, false);
   } catch (error) {
     elements.samplingResult.dataset.error = "true";
     elements.samplingResult.textContent = error.message;
+    setSupportMailto(elements.samplingResult, true, "Soporte VFREG Visor — Intervalo", error.message);
   } finally {
     elements.samplingSave.disabled = false;
   }
@@ -1159,6 +1220,7 @@ elements.reportDownload.addEventListener("click", (event) => {
   else {
     elements.exportStatus.dataset.error = "false";
     elements.exportStatus.textContent = "Descarga CSV iniciada";
+    setSupportMailto(elements.exportStatus, false);
   }
 });
 elements.csvExport.addEventListener("click", () => setReportFormat("csv"));

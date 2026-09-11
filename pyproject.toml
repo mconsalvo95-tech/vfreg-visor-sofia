@@ -26,6 +26,9 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+vfreg_visor = ["assets/*.png"]
+
 [tool.vfreg]
 runtime-config = "config.factory.json"
 setup-command = "setup_new_notebook.bat"

@@ -918,7 +918,15 @@ class StatusTests(unittest.TestCase):
                     dashboard_html = response.read().decode("utf-8")
                 self.assertIn('id="app-version"', dashboard_html)
                 self.assertIn('id="history-filter-form"', dashboard_html)
-                self.assertIn(">Soporte</a>", dashboard_html)
+                self.assertIn("Consulta o dudas: +543884880227", dashboard_html)
+                self.assertIn("https://mail.google.com/mail/", dashboard_html)
+                self.assertIn("mconsalvo95@gmail.com", dashboard_html)
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{server.server_port}/sofia-logo.png", timeout=3
+                ) as response:
+                    logo = response.read()
+                    self.assertEqual(response.headers.get_content_type(), "image/png")
+                self.assertTrue(logo.startswith(b"\x89PNG\r\n\x1a\n"))
                 with open(config_path, "r", encoding="utf-8") as handle:
                     saved = json.load(handle)
                 self.assertEqual(
