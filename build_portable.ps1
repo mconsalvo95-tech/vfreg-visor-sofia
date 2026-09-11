@@ -45,6 +45,7 @@ New-Item -ItemType Directory -Force -Path $DistRoot, $workRoot, $specRoot | Out-
     --specpath $specRoot `
     --paths $sourceRoot `
     --add-data "${dashboardSource}:dashboard" `
+    --add-data "${sourceRoot}\vfreg_visor\assets:vfreg_visor/assets" `
     --hidden-import "xlsxwriter" `
     $launcher
 
@@ -59,6 +60,7 @@ Copy-Item -LiteralPath (Join-Path $projectRoot "portable\LEEME-EMPRESA.txt") -De
 Copy-Item -LiteralPath (Join-Path $projectRoot "portable\Install-VFREGScheduledTask.ps1") -Destination $packageRoot -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "portable\Enable-VFREGWakeTimers.ps1") -Destination $packageRoot -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "portable\Configurar despertar del PC.bat") -Destination $packageRoot -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot "portable\Probar despertar VFREG.bat") -Destination $packageRoot -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "portable\GUIA-OPERADOR-INICIO-AUTOMATICO.txt") -Destination $packageRoot -Force
 New-Item -ItemType Directory -Force -Path (Join-Path $packageRoot "data\factory") | Out-Null
 

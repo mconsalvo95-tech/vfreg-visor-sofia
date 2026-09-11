@@ -26,6 +26,7 @@ START_BAT = PORTABLE_DIR / "Start VFREG Visor.bat"
 OPERATOR_RUNBOOK = PORTABLE_DIR / "GUIA-OPERADOR-INICIO-AUTOMATICO.txt"
 WAKE_TIMER_SCRIPT = PORTABLE_DIR / "Enable-VFREGWakeTimers.ps1"
 WAKE_TIMER_BAT = PORTABLE_DIR / "Configurar despertar del PC.bat"
+WAKE_TEST_BAT = PORTABLE_DIR / "Probar despertar VFREG.bat"
 BUILD_PORTABLE_SCRIPT = PROJECT_ROOT / "build_portable.ps1"
 MOCK_BAT_POWERSHELL = FIXTURES_DIR / "Mock-BatPowerShell.cmd"
 STUB_WAKE_TIMER_SCRIPT = FIXTURES_DIR / "Stub-Enable-VFREGWakeTimers.ps1"
@@ -538,6 +539,7 @@ class ScheduledTaskScriptTests(unittest.TestCase):
         self.assertIn("--no-browser", source)
         self.assertIn("[switch]$Remove", source)
         self.assertIn("[switch]$ValidateOnly", source)
+        self.assertIn("[switch]$NoLogonTrigger", source)
         self.assertIn("VFREG-VISOR-SOFIA.exe", source)
         self.assertIn("config.factory.json", source)
 
@@ -560,6 +562,7 @@ class ScheduledTaskScriptTests(unittest.TestCase):
             payload = json.loads(result.stdout.strip())
             self.assertEqual(payload["mode"], "validate")
             self.assertEqual(payload["daily_start"], "05:50")
+            self.assertTrue(payload["logon_trigger"])
             self.assertEqual(payload["multiple_instances"], "IgnoreNew")
             self.assertEqual(payload["executable"], str(exe_path.resolve()))
             self.assertEqual(payload["config"], str(config_path.resolve()))
@@ -586,6 +589,33 @@ class ScheduledTaskScriptTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, msg=result.stderr or result.stdout)
             payload = json.loads(result.stdout.strip())
             self.assertEqual(payload["daily_start"], "08:30")
+
+    def test_validate_only_omits_logon_trigger_when_requested(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            exe_path = root / "VFREG-VISOR-SOFIA.exe"
+            config_path = root / "config.factory.json"
+            exe_path.write_bytes(b"MZ")
+            config_path.write_text(
+                json.dumps({"dashboard": {"host": "127.0.0.1", "port": 8000}}),
+                encoding="utf-8",
+            )
+            result = _run_powershell_script(
+                "-ValidateOnly",
+                "-DeploymentRoot",
+                str(root),
+                "-TaskName",
+                "VFREG-VISOR-SOFIA-WAKE-TEST",
+                "-DailyStartTime",
+                "15:35",
+                "-NoLogonTrigger",
+            )
+            self.assertEqual(result.returncode, 0, msg=result.stderr or result.stdout)
+            payload = json.loads(result.stdout.strip())
+            self.assertEqual(payload["task_name"], "VFREG-VISOR-SOFIA-WAKE-TEST")
+            self.assertEqual(payload["daily_start"], "15:35")
+            self.assertFalse(payload["logon_trigger"])
+            self.assertTrue(payload["wake_to_run"])
 
     def test_validate_only_rejects_invalid_daily_start_time(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -654,7 +684,12 @@ class ScheduledTaskScriptTests(unittest.TestCase):
         self.assertIn("Install-VFREGScheduledTask.ps1", build_source)
         self.assertIn("Enable-VFREGWakeTimers.ps1", build_source)
         self.assertIn("Configurar despertar del PC.bat", build_source)
+        self.assertIn("Probar despertar VFREG.bat", build_source)
         self.assertIn("GUIA-OPERADOR-INICIO-AUTOMATICO.txt", build_source)
+        self.assertIn("vfreg_visor/assets", build_source)
+        self.assertTrue(
+            (PROJECT_ROOT / "src" / "vfreg_visor" / "assets" / "sofia-logo.png").is_file()
+        )
 
 
 class StartBatTests(unittest.TestCase):
@@ -680,8 +715,29 @@ class StartBatTests(unittest.TestCase):
     def test_operator_runbook_documents_start_bat_task_registration(self) -> None:
         runbook = OPERATOR_RUNBOOK.read_text(encoding="utf-8")
         self.assertIn("Start VFREG Visor.bat", runbook)
+        self.assertIn("Probar despertar VFREG.bat", runbook)
         self.assertIn("05:50", runbook)
         self.assertRegex(runbook, r"(?i)PC personal|personal o de prueba")
+
+
+class WakeTestBatTests(unittest.TestCase):
+    def test_wake_test_bat_uses_separate_task_and_chosen_time(self) -> None:
+        source = WAKE_TEST_BAT.read_text(encoding="utf-8")
+        self.assertTrue(WAKE_TEST_BAT.is_file())
+        self.assertIn("VFREG-VISOR-SOFIA-WAKE-TEST", source)
+        self.assertIn("-NoLogonTrigger", source)
+        self.assertIn("-DailyStartTime", source)
+        self.assertIn("VFREG_WAKE_TEST_ACTION", source)
+        self.assertIn("VFREG_BAT_NO_PAUSE", source)
+        self.assertIn("-Remove", source)
+        self.assertIn("NO cambia la tarea de produccion", source)
+        self.assertNotIn("Enable-VFREGWakeTimers", source)
+        self.assertNotIn('-TaskName "VFREG-VISOR-SOFIA"', source)
+
+    def test_start_bat_does_not_register_wake_test_task(self) -> None:
+        source = START_BAT.read_text(encoding="utf-8")
+        self.assertNotIn("WAKE-TEST", source)
+        self.assertNotIn("Probar despertar", source)
 
 
 class WakeTimerScriptTests(unittest.TestCase):

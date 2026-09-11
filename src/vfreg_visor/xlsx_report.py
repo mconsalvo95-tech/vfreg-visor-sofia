@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+import struct
+import sys
 from typing import Iterable
 
 import xlsxwriter
@@ -31,6 +33,63 @@ PARAMETERS = (
     ("Miliamperios", "mA", "D", "J", "K", PURPLE, "B7", "C7"),
     ("Frecuencia", "Hz", "E", "L", "M", ORANGE, "B8", "C8"),
 )
+
+LOGO_MAX_WIDTH_PX = 220
+LOGO_MAX_HEIGHT_PX = 96
+REPORT_TITLE = "Reporte de insensibilización"
+
+
+def _company_logo_path() -> Path | None:
+    here = Path(__file__).resolve().parent / "assets" / "sofia-logo.png"
+    candidates = [here]
+    meipass = getattr(sys, "_MEIPASS", "")
+    if meipass:
+        candidates.append(Path(meipass) / "vfreg_visor" / "assets" / "sofia-logo.png")
+    for path in candidates:
+        if path.is_file():
+            return path
+    return None
+
+
+def _png_size(path: Path) -> tuple[int, int]:
+    with path.open("rb") as handle:
+        header = handle.read(24)
+    if header[:8] != b"\x89PNG\r\n\x1a\n":
+        return (0, 0)
+    width, height = struct.unpack(">II", header[16:24])
+    return int(width), int(height)
+
+
+def _insert_company_logo(sheet: xlsxwriter.worksheet.Worksheet) -> None:
+    logo = _company_logo_path()
+    if logo is None:
+        return
+    width, height = _png_size(logo)
+    if width <= 0 or height <= 0:
+        return
+    image = xlsxwriter.image.Image(str(logo))
+    layout_width = width * 96.0 / image.x_dpi
+    layout_height = height * 96.0 / image.y_dpi
+    scale = min(
+        LOGO_MAX_WIDTH_PX / layout_width,
+        LOGO_MAX_HEIGHT_PX / layout_height,
+        1.0,
+    )
+    display_width = layout_width * scale
+    display_height = layout_height * scale
+    box_width = sum(sheet._size_col(column) for column in range(7, 12))
+    box_height = sum(sheet._size_row(row) for row in range(4))
+    sheet.insert_image(
+        "H1",
+        image,
+        {
+            "x_offset": max(0, int((box_width - display_width) / 2)),
+            "y_offset": max(0, int((box_height - display_height) / 2)),
+            "x_scale": scale,
+            "y_scale": scale,
+            "object_position": 2,
+        },
+    )
 
 
 @dataclass(frozen=True)
@@ -67,10 +126,10 @@ def write_xlsx_report(
     workbook = xlsxwriter.Workbook(path)
     workbook.set_properties(
         {
-            "title": "Reporte VFREG",
-            "subject": "Datos de producción y gráficos editables",
+            "title": REPORT_TITLE,
+            "subject": "Monitoreo VFREG — Frigorífico Sofía",
             "author": "VFREG",
-            "company": "VFREG",
+            "company": "Frigorífico Sofía",
         }
     )
     formats = _build_formats(workbook)
@@ -414,8 +473,10 @@ def _write_summary(
     raw_last_row: int,
     formats: dict[str, xlsxwriter.format.Format],
 ) -> None:
-    sheet.set_row(0, 30)
-    sheet.merge_range("A1:F1", "Reporte VFREG — Gráficos editables", formats["title"])
+    sheet.set_row(0, 26)
+    for row, height in ((1, 22), (2, 22), (3, 22), (4, 28), (5, 15), (6, 15), (7, 15)):
+        sheet.set_row(row, height)
+    sheet.merge_range("A1:F1", REPORT_TITLE, formats["title"])
     export_details = (
         f"Fecha/hora de exportación: {_format_datetime(datetime.now())}\n"
         f"Lecturas usadas: {int(getattr(statistics, 'total_count', 0))} | "
@@ -425,6 +486,7 @@ def _write_summary(
     if interval_label == "Automático":
         export_details += "\nAutomático (600 valores promedios para graficar)"
     sheet.merge_range("H1:L4", "", formats["box"])
+    _insert_company_logo(sheet)
     sheet.merge_range("M1:U4", export_details, formats["note"])
     sheet.write("A2", "Fechas", formats["label"])
     sheet.merge_range("B2:D2", date_range, formats["value"])
@@ -485,8 +547,6 @@ def _write_summary(
             "error_message": "Ingrese únicamente un valor numérico.",
         },
     )
-    for row, height in ((1, 14), (2, 14), (4, 28), (5, 15), (6, 15), (7, 15)):
-        sheet.set_row(row, height)
 
 
 def _write_page_header(

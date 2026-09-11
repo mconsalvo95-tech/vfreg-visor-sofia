@@ -62,19 +62,21 @@ alcanzable; reconectara automaticamente cuando el equipo este disponible.
 
 ENERGIA, DESPERTAR Y POLITICA DE IT
 -----------------------------------
-- WakeToRun solo funciona si Windows y la politica de energia de IT permiten
-  despertadores de temporizador normales con la PC conectada a corriente (AC).
-- La opcion "Permitir despertadores de temporizador solo importantes" puede
-  impedir que la tarea despierte la PC; IT debe confirmarlo en la PC de planta.
+- WakeToRun solo funciona si Windows permite despertadores de temporizador
+  normales con la PC conectada a corriente (AC).
+- La opcion "Permitir despertadores de temporizador solo importantes" impide
+  que la tarea despierte la PC. IT ya autorizo habilitar despertadores RTC en
+  la PC de planta; en esa PC ejecutar "Configurar despertar del PC.bat" como
+  parte de la instalacion (no usar ese BAT en una PC personal).
 - Un despertar programado puede dejar la pantalla apagada mientras el colector
   ya funciona en segundo plano; verificar http://127.0.0.1:8000/api/status si
   hay duda.
 - El instalador de tareas (Install-VFREGScheduledTask.ps1) NO modifica la
   politica de energia de Windows.
-- Si IT/planta autoriza habilitar despertadores RTC solo con corriente AC, usar
-  el acceso directo de un clic "Configurar despertar del PC.bat". Windows
-  pedira permiso de administrador (UAC). Si cancela UAC o aparece acceso
-  denegado, no se cambia nada.
+- En la PC de planta, habilitar despertadores RTC (solo corriente AC) con el
+  acceso directo "Configurar despertar del PC.bat". Windows pedira permiso de
+  administrador (UAC). Si cancela UAC o aparece acceso denegado, no se cambia
+  nada.
 - Ese asistente solo cambia el valor AC de SUB_SLEEP RTCWAKE al plan activo
   (habilitar despertadores, no solo "importantes"). No modifica la
   configuracion con bateria/DC.
@@ -92,6 +94,26 @@ ENERGIA, DESPERTAR Y POLITICA DE IT
 - Con bateria (portatil o sin AC), Windows puede no despertar la PC para
   tareas programadas; la PC dedicada de planta debe permanecer conectada a
   corriente.
+
+PRUEBA DE DESPERTAR A UNA HORA ELEGIDA
+--------------------------------------
+No hace falta esperar a las 05:50. "Probar despertar VFREG.bat" pide una hora
+HH:mm y registra SOLO la tarea "VFREG-VISOR-SOFIA-WAKE-TEST". No modifica
+"VFREG-VISOR-SOFIA" ni el horario de produccion 05:50.
+
+1. Ejecutar este BAT desde la carpeta extraida del ZIP (planta) o desde una
+   copia de prueba que incluya VFREG-VISOR-SOFIA.exe.
+2. Elegir 1 e ingresar una hora unos minutos en el futuro (ejemplo 15:35).
+3. Para despertar del sueno, en planta ejecutar antes "Configurar despertar
+   del PC.bat". En una PC personal, habilitar despertadores solo para esa
+   prueba y restaurar la politica despues (no dejar RTCWAKE de planta en casa).
+4. Poner la PC a dormir unos minutos ANTES de esa hora.
+5. Confirmar que Windows desperto y el colector arranco.
+6. Volver a "Probar despertar VFREG.bat" y elegir 2 para quitar la tarea de
+   prueba.
+
+Esa tarea de prueba no incluye el disparador de inicio de sesion, para no
+abrir un segundo colector al iniciar sesion.
 
 INICIO MANUAL (OPERADOR)
 ------------------------

@@ -7,6 +7,15 @@ release.
 
 ## Unreleased
 
+- Embed the Frigorífico Sofía plant logo (Alimentos Sofía S.A. wordmark) in
+  the dashboard header and the XLSX Report header box `H1:L4` without cropping
+  it to row 1. Charts remain native Excel LineCharts. The Report sheet title is
+  `Reporte de insensibilización`.
+- Add `Probar despertar VFREG.bat` to register a one-off `WAKE-TEST` task at a
+  chosen HH:mm without changing production `VFREG-VISOR-SOFIA` at 05:50.
+- Dashboard support opens a Gmail compose window to `mconsalvo95@gmail.com`
+  (new browser tab). Danger banners and failed fetch/export/poll actions use
+  the same link with the error text, version, and last reading.
 - Move developer-only notes into `docs/dev/` (roadmap, handoff, notebook setup)
   and drop session `plan.md` from the repository. Operator files remain in
   `portable/` and are the only docs copied into the factory ZIP. The Phase 6A
@@ -50,19 +59,21 @@ release.
   without simulator (DISCONNECTED but listener/writer healthy), simulator later
   connected with same collector PID, SQLite 1573→1578, cleanup passed; Task
   Scheduler Operational log was empty despite strong attribution.
-- Operator runbook expanded: WakeToRun requires IT-approved AC wake-timer
-  policy; important-only may block wake; scheduled wakes may leave display off
-  while collection runs; installer does not change power policy; Task Scheduler
-  End/Stop is abrupt — use console Ctrl+C for normal shutdown.
-- Added one-click AC wake-timer helper for IT-approved deployments:
+- Operator runbook expanded: WakeToRun needs AC wake timers Enabled (not
+  important-only); scheduled wakes may leave the display off while collection
+  runs; the task installer does not change power policy; Task Scheduler End/Stop
+  is abrupt — use console Ctrl+C for normal shutdown. IT approved factory
+  auto-wake on 2026-09-09; enable it on the production PC with
+  `Configurar despertar del PC.bat` (do not run that BAT on the home PC).
+- Added one-click AC wake-timer helper:
   `Configurar despertar del PC.bat` (UAC elevation) and
   `Enable-VFREGWakeTimers.ps1` (`-ValidateOnly` read-only inspection,
   explicit `-Restore` from `data\vfreg-wake-timer-backup.json`, AC-only
   `SUB_SLEEP RTCWAKE=1`, DC unchanged, idempotent enable, audit trail).
-  Factory IT approval and production validation remain pending.
-- Factory gates still open: real Ethernet/NT1-B reconnect, daily 05:50 trigger,
-  production sleep/wake under IT power policy, locked-session, operator/manager
-  UI validation, network-adapter reset, and multi-day soak on the production PC.
+  IT approved factory use; production PC execution still pending.
+- Factory gates still open: real Ethernet/NT1-B reconnect, daily 05:50 trigger
+  on the production PC, enable the approved wake helper there, locked-session,
+  operator/manager UI validation, network-adapter reset, and multi-day soak.
 
 ## 0.4.0.dev1 — 2026-09-06
 

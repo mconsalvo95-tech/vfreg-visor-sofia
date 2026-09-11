@@ -383,17 +383,17 @@ Goal: Operate unattended on the factory PC.
   HH:mm validation delivered locally; home test 2026-09-06 validated alternate
   daily triggers at 16:12 and 16:15; factory PC 05:50 trigger not yet verified).
 - [ ] Configure **Run task as soon as possible after a scheduled start is
-  missed** and **Wake the computer to run this task** where company policy
-  permits it (script sets both; home 2026-09-09 WakeToRun passed under AC
-  RTCWAKE=1 from the helper; 2026-09-07 failed under RTCWAKE=2 important-only
-  and passed after a temporary RTCWAKE=1; factory IT power-policy on the
-  production PC still pending).
-- [ ] Enable AC RTC wake timers on the production PC where IT approves it
-  (local helper delivered: `Configurar despertar del PC.bat` +
-  `Enable-VFREGWakeTimers.ps1` with backup/restore/audit; AC-only mutation;
-  home 2026-09-09: UAC BAT succeeded, AC RTCWAKE=1 Enabled for H5 test, then
-  `-Restore` returned AC to 2 important-only (DC=0 unchanged); backup/audit
-  present; factory IT sign-off and production enable still pending).
+  missed** and **Wake the computer to run this task** (script sets both; IT
+  approved auto-wake for the factory PC on 2026-09-09; home 2026-09-09 WakeToRun
+  passed under AC RTCWAKE=1 from the helper; 2026-09-07 failed under RTCWAKE=2
+  important-only; remaining work is to enable the helper on the production PC
+  and confirm 05:50 actually wakes that machine).
+- [ ] Enable AC RTC wake timers on the production PC (IT approved 2026-09-09;
+  helper: `Configurar despertar del PC.bat` + `Enable-VFREGWakeTimers.ps1`;
+  AC-only `SUB_SLEEP RTCWAKE=1`, DC unchanged, backup/restore/audit; home
+  2026-09-09: UAC BAT succeeded, H5 auto-wake at 02:13, then `-Restore` returned
+  this home PC to AC=2; do not run the BAT on the home PC; factory execution
+  still pending).
 - [x] Add a Windows startup or user-logon trigger so a restart also returns the
   collector to service without waiting until the following day (home test
   2026-09-07 only: reboot 00:56:24, same-user logon 00:57:08, task LastRunTime
@@ -593,4 +593,4 @@ Record meaningful production decisions here as they are approved.
 | 2026-08-25 | Keep Power BI integration inactive as a documented future option | Prioritize the formats employees currently use | MC95 |
 | 2026-08-25 | Approve the Phase 6A mockup and proceed to Phase 6B, with final color refinement deferred | The structure and interaction are approved; operational behavior has priority over visual polish | MC95 |
 | 2026-08-25 | Treat zero/near-zero Volts and mAmp with continuing frequency as Production paused while Connected | This condition was observed during the 2026-08-21 factory stop and must not be mistaken for disconnection or missing data | MC95 |
-| 2026-08-25 | Keep Phase 6B pause detection in the dashboard layer and preserve every raw reading | Improve operator guidance without changing the confirmed collector, protocol, or stored evidence | MC95 |
+| 2026-09-09 | IT approved factory daily 05:50 start and AC wake timers (`Configurar despertar del PC.bat`) | Unattended start before 06:00, including wake from sleep on AC | IT / MC95 |

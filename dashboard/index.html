@@ -12,7 +12,7 @@
 
   <header class="topbar">
     <div class="brand">
-      <div class="logo-placeholder" aria-label="Espacio reservado para el logo de la empresa">LOGO</div>
+      <img class="brand-logo" src="/sofia-logo.png" alt="" width="95" height="56">
       <div class="brand-copy">
         <span class="brand-kicker">Sistema de monitoreo</span>
         <strong>Frigorífico SOFIA</strong>
@@ -72,7 +72,7 @@
             <option value="60">1 minuto</option>
           </select>
           <button class="primary-button" id="sampling-save" type="submit">Aplicar</button>
-          <span class="sampling-result" id="sampling-result" role="status"></span>
+          <a class="sampling-result" id="sampling-result" role="status"></a>
           <small id="daily-reading-estimate">-- lecturas/día</small>
         </form>
       </section>
@@ -80,8 +80,10 @@
       <div class="system-banner" id="system-banner" data-state="info" role="region" aria-labelledby="banner-title">
         <span class="banner-icon" id="banner-icon" aria-hidden="true">…</span>
         <div>
-          <strong id="banner-title">Iniciando monitoreo</strong>
-          <p id="banner-message">La aplicación está esperando la primera respuesta del visor VFREG.</p>
+          <a id="banner-copy">
+            <strong id="banner-title">Iniciando monitoreo</strong>
+            <p id="banner-message">La aplicación está esperando la primera respuesta del visor VFREG.</p>
+          </a>
         </div>
         <button type="button" id="retry-connection">Reintentar</button>
       </div>
@@ -159,7 +161,7 @@
             <button class="primary-button filter-apply" type="submit">Aplicar</button>
             <button class="secondary-button filter-clear" id="history-filter-clear" type="button">Limpiar</button>
           </form>
-          <span class="filter-result" id="history-filter-result" role="status">Cargando últimos 15 minutos…</span>
+          <a class="filter-result" id="history-filter-result" role="status">Cargando últimos 15 minutos…</a>
         </div>
         <div class="chart-legend" aria-label="Referencias del gráfico">
           <span class="legend-voltage">Voltaje</span>
@@ -202,7 +204,7 @@
           <label for="history-view-to">Hasta<input id="history-view-to" type="datetime-local" step="1" required></label>
           <button class="primary-button" type="submit">Aplicar</button>
           <button class="secondary-button" id="history-view-filter-clear" type="button">Limpiar</button>
-          <span class="filter-result" id="history-view-filter-result" role="status"></span>
+          <a class="filter-result" id="history-view-filter-result" role="status"></a>
         </form>
         <div class="quality-filters" role="group" aria-label="Filtrar por calidad">
           <span>Calidad</span>
@@ -212,7 +214,7 @@
         </div>
         <div class="filter-feedback">
           <strong id="history-mode">Cada 15 minutos desde el inicio de jornada</strong>
-          <span id="history-range-result" role="status">Cargando lecturas…</span>
+          <a id="history-range-result" role="status">Cargando lecturas…</a>
         </div>
       </section>
 
@@ -253,7 +255,7 @@
             <label for="report-from">Desde<input id="report-from" type="datetime-local" step="1" required></label>
             <label for="report-to">Hasta<input id="report-to" type="datetime-local" step="1" required></label>
             <button class="primary-button" type="submit">Aplicar período</button>
-            <span class="filter-result" id="report-custom-result" role="status"></span>
+            <a class="filter-result" id="report-custom-result" role="status"></a>
           </form>
         </div>
 
@@ -326,16 +328,16 @@
           </div>
         </div>
       </section>
-      <p class="export-status" id="export-status" role="status"></p>
+      <a class="export-status" id="export-status" role="status"></a>
     </section>
 
     <details class="support-details">
       <summary>Información técnica y soporte</summary>
       <div>
-        <span id="network-endpoint">Conexión: cargando…</span>
-        <span id="storage-health">Almacenamiento: iniciando…</span>
+        <a id="support-email" href="https://mail.google.com/mail/?view=cm&amp;fs=1&amp;to=mconsalvo95@gmail.com&amp;su=Soporte%20VFREG%20Visor" target="_blank" rel="noopener noreferrer">Enviar correo a soporte</a>
+        <a href="tel:+543884880227">Consulta o dudas: +543884880227</a>
         <span id="app-version">Versión cargando…</span>
-        <a href="https://github.com/mconsalvo95-tech/vfreg-visor-sofia" target="_blank" rel="noreferrer">Soporte</a>
+        <span id="last-reading">Última lectura: cargando…</span>
       </div>
     </details>
   </main>
