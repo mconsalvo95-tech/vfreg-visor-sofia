@@ -52,7 +52,10 @@ class Phase6CInteractionTests(unittest.TestCase):
         self.assertIn("renderHistory(result.readings", self.javascript)
         self.assertIn("drawChart(currentReadings)", self.javascript)
         self.assertIn("elements.reportDownload.href", self.javascript)
-        self.assertIn('"/api/export.xlsx" : "/api/export.csv"', self.javascript)
+        self.assertIn(
+            '"/api/export.daily.xlsx" : intraDay ? "/api/export.xlsx" : "/api/export.csv"',
+            self.javascript,
+        )
         self.assertIn("loadHistorySamples", self.javascript)
         self.assertIn("renderSampledHistory", self.javascript)
         self.assertIn("sample_minutes", self.javascript)
@@ -80,8 +83,11 @@ class Phase6CInteractionTests(unittest.TestCase):
             self.assertIn(f'id="{element_id}"', self.html)
         self.assertIn('data-history-minutes="15"', self.html)
         self.assertIn('data-report-format="xlsx"', self.html)
+        self.assertIn('data-report-format="daily"', self.html)
+        self.assertIn('id="daily-export"', self.html)
+        self.assertIn("Promedios diarios", self.html)
         self.assertIn("function setReportFormat", self.javascript)
-        self.assertIn("elements.workbookPreview.hidden = !xlsx", self.javascript)
+        self.assertIn("elements.workbookPreview.hidden = !intraDay", self.javascript)
 
     def test_xlsx_preview_matches_raw_data_and_report_workbook(self) -> None:
         for element_id in (
@@ -116,7 +122,7 @@ class Phase6CInteractionTests(unittest.TestCase):
         self.assertIn('query.set("chart_interval_minutes", chartExportInterval)', self.javascript)
         self.assertIn("function setChartExportInterval", self.javascript)
         self.assertIn("function aggregateChartPreview", self.javascript)
-        self.assertIn('elements.chartIntervalStep.hidden = !xlsx', self.javascript)
+        self.assertIn('elements.chartIntervalStep.hidden = !intraDay', self.javascript)
         self.assertIn("Define cuánto tiempo resume cada punto", self.html)
         self.assertIn("Cada 5 min", self.html)
         self.assertNotIn("bucket.paused", self.javascript)

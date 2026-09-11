@@ -76,5 +76,16 @@ Copiar toda la carpeta si se necesita conservar o respaldar la informacion.
 WINDOWS FIREWALL / SMARTSCREEN
 ------------------------------
 El ejecutable es una compilacion interna sin firma digital. Windows puede mostrar
-una advertencia de SmartScreen. La aplicacion solamente publica el dashboard en
-127.0.0.1 y se conecta al NT1-B en 192.168.1.7:502.
+una advertencia de SmartScreen o "se detecto software malicioso" al iniciar a
+las 05:50, porque el ZIP se descargo de Internet y la tarea no puede pulsar
+"Ejecutar de todos modos".
+
+En PowerShell, dentro de la carpeta extraida (no hace falta administrador):
+
+  Get-ChildItem -Recurse -File | Unblock-File
+
+Luego iniciar de nuevo con "Start VFREG Visor.bat". Si Windows Defender pone
+el .exe en cuarentena, pedir a IT una exclusion de esa carpeta (solo esta PC
+de planta) o restaurar el archivo en Seguridad de Windows. La aplicacion
+solamente publica el dashboard en 127.0.0.1 y se conecta al NT1-B en
+192.168.1.7:502.

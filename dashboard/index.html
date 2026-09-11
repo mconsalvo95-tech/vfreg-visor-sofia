@@ -268,6 +268,14 @@
             <button class="format-card is-selected" id="xlsx-export" type="button" data-report-format="xlsx" aria-pressed="true">
               <span class="file-mark excel">XLSX</span><span><strong>Excel + gráficos</strong><small>Lecturas y tres gráficos separados para revisión.</small></span><b class="selection-mark" aria-hidden="true">✓</b>
             </button>
+            <button class="format-card" id="daily-export" type="button" data-report-format="daily" aria-pressed="false">
+              <span class="file-mark excel">XLSX</span>
+              <span>
+                <strong>Promedios diarios</strong>
+                <small>Un promedio por día de Voltaje, Corriente y Frecuencia, con gráficos.</small>
+              </span>
+              <b class="selection-mark" aria-hidden="true">✓</b>
+            </button>
           </div>
         </div>
 
@@ -329,7 +337,49 @@
         </div>
       </section>
       <a class="export-status" id="export-status" role="status"></a>
+
+      <section class="panel archive-wipe-panel" aria-labelledby="archive-wipe-title">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Mantenimiento de historial</p>
+            <h2 id="archive-wipe-title">Archivar y vaciar la base</h2>
+          </div>
+        </div>
+        <div class="archive-wipe-body">
+          <p>Descarga un ZIP con <strong>readings.csv</strong> y <strong>readings.sqlite</strong> (mismas columnas: Fecha, Hora, Volts, mAmp, Frec). Después borra el historial de esta PC para liberar espacio. La recolección sigue; las lecturas nuevas se vuelven a guardar.</p>
+          <p>Esta acción no se puede deshacer en la aplicación. Conserve el ZIP. Si la descarga falla, el archivo queda en la carpeta <code>archives</code> junto a la base de datos. Excel no abre más de 1.048.576 filas.</p>
+          <button class="danger-button" type="button" id="archive-wipe-open">Archivar y vaciar historial</button>
+          <p class="archive-wipe-status" id="archive-wipe-status" role="status"></p>
+        </div>
+      </section>
     </section>
+
+    <dialog class="archive-wipe-dialog" id="archive-wipe-dialog" aria-labelledby="archive-wipe-dialog-title">
+      <div id="archive-wipe-step-1">
+        <h2 id="archive-wipe-dialog-title">Advertencia: se borrará el historial</h2>
+        <ul>
+          <li>Se descargará un ZIP con <code>readings.csv</code> y <code>readings.sqlite</code> (Fecha, Hora, Volts, mAmp, Frec).</li>
+          <li>Después se eliminarán todas las lecturas ya guardadas en esta PC.</li>
+          <li>El visor sigue recolectando. Las lecturas nuevas no se pierden.</li>
+          <li>No se puede deshacer desde la aplicación. Guarde el ZIP descargado.</li>
+        </ul>
+        <div class="archive-wipe-actions">
+          <button class="secondary-button" type="button" id="archive-wipe-cancel">Cancelar</button>
+          <button class="danger-button" type="button" id="archive-wipe-continue">Entiendo, continuar</button>
+        </div>
+      </div>
+      <div id="archive-wipe-step-2" hidden>
+        <h2>Confirme escribiendo VACIAR</h2>
+        <p>Escriba <strong>VACIAR</strong> para descargar la copia y vaciar la base. Cancelar no borra nada.</p>
+        <label for="archive-wipe-confirm">Frase de confirmación
+          <input id="archive-wipe-confirm" type="text" autocomplete="off" spellcheck="false" placeholder="VACIAR">
+        </label>
+        <div class="archive-wipe-actions">
+          <button class="secondary-button" type="button" id="archive-wipe-cancel-2">Cancelar</button>
+          <button class="danger-button" type="button" id="archive-wipe-confirm-btn" disabled>Descargar copia y vaciar</button>
+        </div>
+      </div>
+    </dialog>
 
     <details class="support-details">
       <summary>Información técnica y soporte</summary>

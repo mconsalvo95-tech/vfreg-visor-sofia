@@ -483,7 +483,7 @@ tr[data-quality="unverified"] .table-status::before { content: "?"; background: 
 .scope-card small { color: var(--muted); font-size: 8px; }
 .scope-card b { margin-top: 4px; color: var(--brand); font-size: 9px; }
 .report-custom-filter { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
-.format-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.format-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .format-card { min-height: 77px; padding: 12px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 11px; text-align: left; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-soft); cursor: pointer; }
 .format-card:hover, .format-card.is-selected { border-color: #78bec5; background: var(--brand-soft); }
 .file-mark { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 10px; background: #eaf1f4; color: var(--navy); font-size: 10px; font-weight: 900; }
@@ -529,6 +529,34 @@ tr[data-quality="unverified"] .table-status::before { content: "?"; background: 
 .preview-chart-list canvas { width: 100%; height: 94px; display: block; }
 .preview-chart-list small { text-align: center; color: var(--muted); font-size: 8px; }
 .export-status { display: block; min-height: 28px; margin: 12px 2px 0; color: var(--success); font-size: 11px; font-weight: 750; }
+.archive-wipe-panel { margin-top: 18px; border-color: #e3b6b3; }
+.archive-wipe-body { padding: 16px; display: grid; gap: 12px; }
+.archive-wipe-body p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.archive-wipe-body code { font-size: 11px; }
+.danger-button {
+  min-height: 36px;
+  padding: 0 14px;
+  justify-self: start;
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.danger-button:hover { background: #9b2e2b; }
+.danger-button:disabled { cursor: wait; opacity: 0.65; }
+.archive-wipe-status { min-height: 18px; margin: 0; color: var(--muted); font-size: 11px; font-weight: 750; }
+.archive-wipe-status[data-error="true"] { color: var(--danger); }
+.archive-wipe-dialog { width: min(520px, calc(100% - 32px)); padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: #fff; color: var(--ink); box-shadow: var(--shadow); }
+.archive-wipe-dialog::backdrop { background: rgba(8, 30, 40, 0.45); }
+.archive-wipe-dialog h2 { margin: 0 0 12px; font-size: 16px; }
+.archive-wipe-dialog p, .archive-wipe-dialog li { color: var(--muted); font-size: 12px; line-height: 1.45; }
+.archive-wipe-dialog ul { margin: 0 0 16px; padding-left: 18px; display: grid; gap: 8px; }
+.archive-wipe-dialog label { display: grid; gap: 6px; margin-bottom: 16px; font-size: 11px; font-weight: 800; }
+.archive-wipe-dialog input { min-height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; font-weight: 700; letter-spacing: 0.08em; }
+.archive-wipe-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 
 .support-details { margin-top: 18px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255, 255, 255, 0.64); color: var(--muted); font-size: 10px; }
 .support-details summary { padding: 10px 13px; cursor: pointer; font-weight: 750; }

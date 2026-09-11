@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 
 from .config import default_config_path, load_config
 from .storage import format_manager_timestamp, measurement_snapshot
-from .xlsx_report import ChartPoint, write_xlsx_report
+from .xlsx_report import ChartPoint, DailySummaryRow, write_daily_xlsx_report, write_xlsx_report
 
 
 PAUSE_VOLTAGE_MAX = 0.5
@@ -240,6 +240,125 @@ def build_xlsx(
                 statistics_builder.finish(),
                 chart_interval_label,
                 chart_points,
+            )
+
+
+def build_daily_xlsx(
+    cfg: dict,
+    output_path: str | None = None,
+    start_time: str | None = None,
+    end_time: str | None = None,
+) -> str:
+    """Select stored readings and render one daily-averages XLSX file."""
+    sqlite_path = cfg["output_sqlite"]
+    selected_start = parse_report_datetime(start_time)
+    selected_end = parse_report_datetime(end_time)
+    statistics_builder = ReportStatisticsBuilder(
+        expected_interval_seconds(cfg),
+        selected_start,
+        selected_end,
+    )
+    day_buckets: dict = {}
+    with measurement_snapshot(sqlite_path, start_time, end_time) as (summary, rows):
+        selected_count = int(summary.get("count") or 0)
+        if selected_count > MAX_XLSX_DATA_ROWS:
+            raise XlsxRowLimitError(selected_count)
+
+        with tempfile.SpooledTemporaryFile(
+            max_size=1_048_576,
+            mode="w+t",
+            encoding="utf-8",
+        ) as raw_row_spool:
+            for exported_index, row in enumerate(rows, start=1):
+                if exported_index > MAX_XLSX_DATA_ROWS:
+                    raise XlsxRowLimitError(exported_index)
+                paused, valid = statistics_builder.add(row)
+                timestamp = parse_report_datetime(row.get("timestamp"))
+                timestamp_value = row.get("timestamp")
+                raw_row_spool.write(
+                    json.dumps(
+                        [
+                            None if timestamp_value in (None, "") else str(timestamp_value),
+                            numeric_value(row.get("voltage_v")),
+                            numeric_value(row.get("current_ma")),
+                            numeric_value(row.get("frequency_hz")),
+                        ],
+                        separators=(",", ":"),
+                    )
+                    + "\n"
+                )
+                if timestamp is None:
+                    continue
+                day_key = timestamp.date()
+                bucket = day_buckets.setdefault(
+                    day_key,
+                    {
+                        "reading_count": 0,
+                        "start": None,
+                        "end": None,
+                        "voltages": [],
+                        "currents": [],
+                        "frequencies": [],
+                    },
+                )
+                bucket["reading_count"] += 1
+                if bucket["start"] is None or timestamp < bucket["start"]:
+                    bucket["start"] = timestamp
+                if bucket["end"] is None or timestamp > bucket["end"]:
+                    bucket["end"] = timestamp
+                voltage = numeric_value(row.get("voltage_v"))
+                current = numeric_value(row.get("current_ma"))
+                frequency = numeric_value(row.get("frequency_hz"))
+                if valid and not paused and voltage is not None and voltage > PAUSE_VOLTAGE_MAX:
+                    bucket["voltages"].append(voltage)
+                if valid and not paused and current is not None and current > PAUSE_CURRENT_MAX:
+                    bucket["currents"].append(current)
+                if valid and frequency is not None and frequency > RECEIVED_FREQUENCY_MIN:
+                    bucket["frequencies"].append(frequency)
+
+            def _average(values: list[float]) -> float | None:
+                return sum(values) / len(values) if values else None
+
+            daily_rows: list[DailySummaryRow] = []
+            for day_key in sorted(day_buckets):
+                bucket = day_buckets[day_key]
+                if bucket["reading_count"] <= 0:
+                    continue
+                voltages = bucket["voltages"]
+                currents = bucket["currents"]
+                frequencies = bucket["frequencies"]
+                daily_rows.append(
+                    DailySummaryRow(
+                        date=datetime(day_key.year, day_key.month, day_key.day),
+                        voltage_avg=_average(voltages),
+                        current_avg=_average(currents),
+                        frequency_avg=_average(frequencies),
+                        voltage_min=min(voltages) if voltages else None,
+                        voltage_max=max(voltages) if voltages else None,
+                        current_min=min(currents) if currents else None,
+                        current_max=max(currents) if currents else None,
+                        frequency_min=min(frequencies) if frequencies else None,
+                        frequency_max=max(frequencies) if frequencies else None,
+                        reading_count=bucket["reading_count"],
+                        start=bucket["start"],
+                        end=bucket["end"],
+                    )
+                )
+            raw_row_spool.seek(0)
+            return write_daily_xlsx_report(
+                output_path or cfg.get("output_xlsx", "data/readings.xlsx"),
+                daily_rows,
+                statistics_builder.finish(),
+                (
+                    (
+                        parse_report_datetime(item[0]),
+                        item[1],
+                        item[2],
+                        item[3],
+                    )
+                    for line in raw_row_spool
+                    for item in [json.loads(line)]
+                ),
             )
 
 

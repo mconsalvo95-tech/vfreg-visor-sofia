@@ -5,11 +5,12 @@ import mimetypes
 import shutil
 import sys
 import tempfile
+import unicodedata
 from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 from . import __version__
 from .config import (
@@ -19,6 +20,8 @@ from .config import (
 )
 from .network import NetworkCollector
 from .storage import (
+    ARCHIVE_CONFIRM_PHRASE,
+    StorageError,
     StorageWriter,
     export_csv,
     fetch_events,
@@ -27,7 +30,25 @@ from .storage import (
     fetch_sampled_interval,
     fetch_summary,
 )
-from .xlsx_report import _company_logo_path
+from .xlsx_report import (
+    CSV_DOWNLOAD_FILENAME,
+    DAILY_XLSX_DOWNLOAD_FILENAME,
+    XLSX_DOWNLOAD_FILENAME,
+    _company_logo_path,
+)
+
+
+def attachment_disposition(filename: str) -> str:
+    ascii_name = (
+        unicodedata.normalize("NFKD", filename)
+        .encode("ascii", "ignore")
+        .decode("ascii")
+        .replace('"', "")
+    )
+    return (
+        f'attachment; filename="{ascii_name}"; '
+        f"filename*=UTF-8''{quote(filename)}"
+    )
 
 
 if getattr(sys, "frozen", False):
@@ -108,7 +129,17 @@ def parse_time_range(query: dict[str, list[str]]) -> tuple[str | None, str | Non
         except ValueError as error:
             raise ValueError(f"Invalid {name} date/time") from error
         value = value.astimezone()
-        value = value.replace(microsecond=999999 if end else 0)
+        if len(raw) == 10 and raw.count("-") == 2:
+            if end:
+                value = value.replace(
+                    hour=23, minute=59, second=59, microsecond=999999
+                )
+            else:
+                value = value.replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                )
+        else:
+            value = value.replace(microsecond=999999 if end else 0)
         return value
 
     start_value = parse_bound("from", end=False)
@@ -162,7 +193,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         if filename:
-            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+            self.send_header("Content-Disposition", attachment_disposition(filename))
         self.end_headers()
         self.wfile.write(body)
 
@@ -181,7 +212,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             if filename:
-                self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+                self.send_header("Content-Disposition", attachment_disposition(filename))
             self.end_headers()
             with path.open("rb") as source:
                 shutil.copyfileobj(source, self.wfile, length=64 * 1024)
@@ -363,7 +394,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     end_time,
                 )
             )
-            self.send_bytes(path.read_bytes(), "text/csv; charset=utf-8", "vfreg-readings.csv")
+            self.send_bytes(path.read_bytes(), "text/csv; charset=utf-8", CSV_DOWNLOAD_FILENAME)
             return
 
         if parsed.path == "/api/export.xlsx":
@@ -432,7 +463,76 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.send_file(
                 path,
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                "vfreg-readings.xlsx",
+                XLSX_DOWNLOAD_FILENAME,
+                delete_after=True,
+            )
+            return
+
+        if parsed.path == "/api/export.daily.xlsx":
+            query = parse_qs(parsed.query)
+            try:
+                start_time, end_time = parse_time_range(query)
+            except ValueError as error:
+                self.send_error_json(HTTPStatus.BAD_REQUEST, str(error))
+                return
+            try:
+                from .exports import XlsxRowLimitError, build_daily_xlsx
+            except ModuleNotFoundError:
+                self.send_error_json(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    "XLSX export requires XlsxWriter; run install_dependencies.bat",
+                )
+                return
+            except ImportError as error:
+                self.send_error_json(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    f"Collector modules changed; restart the collector before exporting XLSX: {error}",
+                )
+                return
+            output_directory = Path(cfg.get("output_xlsx", "data/readings.xlsx")).resolve().parent
+            output_directory.mkdir(parents=True, exist_ok=True)
+            temporary = tempfile.NamedTemporaryFile(
+                prefix="vfreg-daily-",
+                suffix=".xlsx",
+                dir=output_directory,
+                delete=False,
+            )
+            temporary_path = Path(temporary.name)
+            temporary.close()
+            try:
+                path = Path(
+                    build_daily_xlsx(
+                        cfg,
+                        output_path=str(temporary_path),
+                        start_time=start_time,
+                        end_time=end_time,
+                    )
+                )
+            except XlsxRowLimitError as error:
+                temporary_path.unlink(missing_ok=True)
+                self.send_error_json(
+                    HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                    str(error),
+                )
+                return
+            except Exception as error:
+                temporary_path.unlink(missing_ok=True)
+                self.send_error_json(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    f"XLSX generation failed: {error}",
+                )
+                return
+            if path.resolve() != temporary_path.resolve():
+                temporary_path.unlink(missing_ok=True)
+                self.send_error_json(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    "XLSX generation did not use its request-specific destination",
+                )
+                return
+            self.send_file(
+                path,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                DAILY_XLSX_DOWNLOAD_FILENAME,
                 delete_after=True,
             )
             return
@@ -463,7 +563,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
-        if path not in {"/api/session", "/api/poll-interval"}:
+        if path not in {"/api/session", "/api/poll-interval", "/api/archive-and-wipe"}:
             self.send_not_found()
             return
         payload = self.read_json_payload()
@@ -472,6 +572,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
         if path == "/api/poll-interval":
             self.update_poll_interval(payload)
+            return
+        if path == "/api/archive-and-wipe":
+            self.archive_and_wipe(payload)
             return
 
         batch_id = str(payload.get("batch_id", "")).strip()
@@ -526,3 +629,38 @@ class DashboardHandler(BaseHTTPRequestHandler):
             f"Modbus polling interval changed to {applied:g} seconds",
         )
         self.send_json({"ok": True, "poll_interval_seconds": applied})
+
+    def archive_and_wipe(self, payload: dict) -> None:
+        confirm = str(payload.get("confirm", ""))
+        if confirm.strip().upper() != ARCHIVE_CONFIRM_PHRASE:
+            self.send_error_json(
+                HTTPStatus.BAD_REQUEST,
+                "Escriba VACIAR para confirmar el archivado y el vaciado.",
+            )
+            return
+        try:
+            result = self.app_server.writer.archive_and_reset(confirm)
+        except StorageError as error:
+            message = str(error)
+            status = (
+                HTTPStatus.BAD_REQUEST
+                if ARCHIVE_CONFIRM_PHRASE in message and "confirmar" in message.lower()
+                else HTTPStatus.CONFLICT
+            )
+            self.send_error_json(status, message)
+            return
+        except OSError as error:
+            self.send_error_json(HTTPStatus.INTERNAL_SERVER_ERROR, str(error))
+            return
+        archive_path = Path(str(result["path"]))
+        filename = str(result.get("filename") or archive_path.name)
+        try:
+            self.send_file(
+                archive_path,
+                "application/zip",
+                filename,
+                delete_after=False,
+            )
+        except OSError:
+            return
+        archive_path.unlink(missing_ok=True)

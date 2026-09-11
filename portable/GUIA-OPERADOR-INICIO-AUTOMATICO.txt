@@ -39,6 +39,14 @@ Si Windows muestra "Acceso denegado", repetir el paso 6 estando conectado con
 la cuenta del operador dedicado o solicitar a IT permiso para crear tareas
 para ese usuario. Normalmente no se requiere ejecutar como administrador.
 
+Si a las 05:50 aparece SmartScreen o "se detecto software malicioso", el ZIP
+llego marcado como descargado de Internet. En la carpeta extraida:
+
+  Get-ChildItem -Recurse -File | Unblock-File
+
+"Start VFREG Visor.bat" tambien quita esa marca al registrar la tarea. Si
+Defender aisla el .exe, restaurarlo y pedir a IT una exclusion de esa carpeta.
+
 COMPORTAMIENTO AUTOMATICO
 -------------------------
 La tarea "VFREG-VISOR-SOFIA" hace lo siguiente:
